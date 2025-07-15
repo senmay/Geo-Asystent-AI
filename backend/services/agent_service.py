@@ -94,6 +94,8 @@ def process_query(query: str) -> dict:
         print(f"Routed to intent: '{intent}' with details: {route_details}")
 
         if intent == 'get_gis_data':
+            if not route_details.get('layer_name'):
+                return {"type": "text", "data": "Nie sprecyzowałeś, którą warstwę wyświetlić. Spróbuj \"pokaż działki\" lub \"pokaż budynki\".", "intent": intent}
             tool_input = {"layer_name": route_details['layer_name'], "db_engine": engine}
             geojson_data = get_layer_as_geojson.invoke(tool_input)
         
