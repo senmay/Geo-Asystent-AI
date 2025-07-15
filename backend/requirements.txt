@@ -9,3 +9,7 @@ python-dotenv
 sqlalchemy
 geoalchemy2
 psycopg2-binary
+
+# Testing
+pytest
+pytest-cov
