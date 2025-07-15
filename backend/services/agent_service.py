@@ -75,7 +75,9 @@ SCHEMAT:
 
 routing_chain = prompt | llm | parser
 chat_prompt = PromptTemplate.from_template(
-    "You are a helpful assistant. Answer the following question concisely in Polish.\nQuestion: {query}"
+    """Jesteś pomocnym asystentem. Odpowiedz na poniższe pytanie zwięźle i uprzejmie w języku polskim. Jeśli pytanie nie dotyczy GIS, staraj się udzielić ogólnej, sensownej odpowiedzi. Jeśli nie znasz odpowiedzi, powiedz, że nie wiesz.
+
+Question: {query}"""
 )
 chat_chain = chat_prompt | llm
 
@@ -113,10 +115,15 @@ def process_query(query: str) -> dict:
 
         # Common return logic for GIS tools
         if "Error:" in geojson_data:
-            return {"type": "text", "data": geojson_data}
+            return {"type": "text", "data": geojson_data, "intent": intent}
         else:
-            return {"type": "geojson", "data": geojson_data}
+            return {"type": "geojson", "data": geojson_data, "intent": intent}
 
     except Exception as e:
         print(f"An error occurred during query processing: {e}")
-        return {"type": "text", "data": "Przepraszam, mam problem z przetworzeniem Twojego zapytania."}
+        return {"type": "text", "data": """Przepraszam, nie rozumiem Twojego zapytania. Jestem asystentem GIS i mogę:
+- Wyświetlić warstwy GIS (np. "pokaż działki", "wczytaj budynki").
+- Znaleźć największą działkę (np. "jaka jest największa działka").
+- Znaleźć N największych działek (np. "pokaż 10 największych działek").
+- Znaleźć działki o powierzchni większej niż X (np. "działki powyżej 100m2").
+Spróbuj sformułować zapytanie w jeden z tych sposobów.""", "intent": "error"}

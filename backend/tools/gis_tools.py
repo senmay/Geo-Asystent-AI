@@ -14,10 +14,13 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
 
     normalized_input = layer_name.lower().strip()
     base_layer_name = None
+    id_column = None
     if "parcel" in normalized_input or "działki" in normalized_input:
         base_layer_name = "parcels"
+        id_column = "ID_DZIALKI"
     elif "building" in normalized_input or "budynki" in normalized_input:
         base_layer_name = "buildings"
+        id_column = "ID_BUDYNKU"
     
     if not base_layer_name:
         return f"Error: Could not identify a valid layer name in the input: '{layer_name}'. Please ask for 'parcels' or 'buildings'."
@@ -33,6 +36,11 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
         
         gdf_reprojected = gdf.to_crs(epsg=4326)
         gdf_reprojected['loaded_layer'] = table_to_use
+        
+        # Add a message with the ID
+        if id_column and id_column in gdf.columns:
+            gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
+        
         return gdf_reprojected.to_json()
         
     except Exception as e:
@@ -45,6 +53,10 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
             
             gdf_reprojected = gdf.to_crs(epsg=4326)
             gdf_reprojected['loaded_layer'] = table_to_use
+            
+            if id_column and id_column in gdf.columns:
+                gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
+
             return gdf_reprojected.to_json()
         except Exception as final_e:
             return f"Error processing data from database: {final_e}"
@@ -57,11 +69,8 @@ def find_largest_parcel(db_engine: Engine) -> str:
     """
     print("Tool 'find_largest_parcel' called.")
     
-    # We assume the table with parcels is named 'parcels_low'
     table_name = "parcels_low"
     
-    # SQL query to find the largest parcel using ST_Area
-    # We also calculate the area and select the ID column (assuming it's named 'jpt_kod_je')
     sql = f"""
         SELECT *, ST_Area(geometry) as area_sqm
         FROM "{table_name}"
@@ -74,13 +83,13 @@ def find_largest_parcel(db_engine: Engine) -> str:
         if gdf.empty:
             return "Error: Could not find any parcels in the database."
             
-        print(f"Found largest parcel with ID: {gdf.iloc[0].get('jpt_kod_je', 'N/A')}")
+        print(f"Found largest parcel with ID: {gdf.iloc[0].get('ID_DZIALKI', 'N/A')}")
         
         gdf_reprojected = gdf.to_crs(epsg=4326)
-        # Add a custom message to be displayed
-        parcel_id = gdf.iloc[0].get('jpt_kod_je', 'Brak ID')
-        area = gdf.iloc[0]['area_sqm']
-        gdf_reprojected['message'] = f"Największa działka. ID: {parcel_id}, Powierzchnia: {area:.2f} m²"
+        parcel_id = gdf.iloc[0].get('ID_DZIALKI', 'Brak ID')
+        area_sqm = gdf.iloc[0]['area_sqm']
+        area_ha = area_sqm / 10000
+        gdf_reprojected['message'] = f"Największa działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha"
         
         return gdf_reprojected.to_json()
     except Exception as e:
@@ -114,9 +123,10 @@ def find_n_largest_parcels(n: int, db_engine: Engine) -> str:
         
         messages = []
         for index, row in gdf.iterrows():
-            parcel_id = row.get('jpt_kod_je', 'Brak ID')
-            area = row['area_sqm']
-            messages.append(f"Działka nr {index + 1}. ID: {parcel_id}, Powierzchnia: {area:.2f} m²")
+            parcel_id = row.get('ID_DZIALKI', 'Brak ID')
+            area_sqm = row['area_sqm']
+            area_ha = area_sqm / 10000
+            messages.append(f"Działka nr {index + 1}. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
         
         gdf_reprojected['message'] = messages
         
@@ -151,9 +161,10 @@ def find_parcels_above_area(min_area: float, db_engine: Engine) -> str:
         
         messages = []
         for index, row in gdf.iterrows():
-            parcel_id = row.get('jpt_kod_je', 'Brak ID')
-            area = row['area_sqm']
-            messages.append(f"ID: {parcel_id}, Powierzchnia: {area:.2f} m²")
+            parcel_id = row.get('ID_DZIALKI', 'Brak ID')
+            area_sqm = row['area_sqm']
+            area_ha = area_sqm / 10000
+            messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
             
         gdf_reprojected['message'] = messages
         

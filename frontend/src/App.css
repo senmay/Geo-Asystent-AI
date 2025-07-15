@@ -49,6 +49,7 @@ body, html, #root {
   border-radius: 18px;
   max-width: 80%;
   word-wrap: break-word;
+  white-space: pre-wrap; /* This will respect newline characters */
 }
 
 .chat-message.user {
@@ -62,6 +63,15 @@ body, html, #root {
   color: var(--text-color-dark);
   align-self: flex-start;
 }
+
+.chat-message.bot[data-message-type='info'] {
+  font-style: italic;
+  color: #888;
+  background-color: #f9f9f9;
+  border-left: 3px solid #ccc;
+  font-size: 0.9rem; /* Smaller font size */
+}
+
 
 .chat-input-form {
   display: flex;

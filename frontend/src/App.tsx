@@ -11,7 +11,16 @@ type GeoJsonObject = any;
 interface Message {
   sender: 'user' | 'bot';
   text: string;
+  type?: 'info' | 'data'; // Optional: to distinguish between info and data messages
 }
+
+const intentToFriendlyName: { [key: string]: string } = {
+  get_gis_data: 'Pobieranie warstwy GIS',
+  find_largest_parcel: 'Wyszukiwanie największej działki',
+  find_n_largest_parcels: 'Wyszukiwanie N największych działek',
+  find_parcels_above_area: 'Wyszukiwanie działek powyżej określonej powierzchni',
+  chat: 'Rozmowa ogólna',
+};
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -31,16 +40,38 @@ function App() {
         query: input,
       });
 
-      const { type, data } = response.data;
+      const { type, data, intent } = response.data;
+
+      // Display the informational message about the tool being used
+      if (intent && intentToFriendlyName[intent]) {
+        const infoMessage: Message = {
+          sender: 'bot',
+          text: `Używam narzędzia: "${intentToFriendlyName[intent]}"`, 
+          type: 'info',
+        };
+        setMessages((prev) => [...prev, infoMessage]);
+      }
 
       if (type === 'geojson') {
         const geojsonData = JSON.parse(data);
-        setGeojson(geojsonData); // Set the new data
-        const botMessage: Message = { sender: 'bot', text: `Wyświetlono warstwę: ${geojsonData.features[0]?.properties?.loaded_layer || 'dane'}` };
+        setGeojson(geojsonData);
+
+        const messagesFromFeatures = geojsonData.features
+          ?.map((feature: any) => feature.properties?.message)
+          .filter(Boolean);
+
+        let botMessageText;
+        if (messagesFromFeatures?.length > 0) {
+          botMessageText = messagesFromFeatures.join('\n');
+        } else {
+          botMessageText = `Wyświetlono ${geojsonData.features?.length || 0} obiektów na mapie.`;
+        }
+
+        const botMessage: Message = { sender: 'bot', text: botMessageText, type: 'data' };
         setMessages((prev) => [...prev, botMessage]);
       } else {
-        setGeojson(null); // Clear the map if the response is not geojson
-        const botMessage: Message = { sender: 'bot', text: data };
+        setGeojson(null);
+        const botMessage: Message = { sender: 'bot', text: data, type: 'data' };
         setMessages((prev) => [...prev, botMessage]);
       }
     } catch (error) {
@@ -52,6 +83,7 @@ function App() {
       setMessages((prev) => [...prev, errorMessage]);
     }
   };
+
 
   return (
     <div className="app-container">
