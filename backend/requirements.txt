@@ -6,3 +6,6 @@ python-multipart
 langchain
 langchain-groq
 python-dotenv
+sqlalchemy
+geoalchemy2
+psycopg2-binary

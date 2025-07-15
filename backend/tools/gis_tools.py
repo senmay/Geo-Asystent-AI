@@ -1,19 +1,16 @@
 import geopandas as gpd
 from langchain.tools import tool
 import os
-import re
+from sqlalchemy.engine import Engine
 
 @tool
-def get_layer_as_geojson(layer_name: str, data_path: str) -> str:
+def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
     """
-    Finds a specific GIS layer by its name, reprojects it to WGS 84 (EPSG:4326), 
-    and returns it as a GeoJSON string.
+    Retrieves a GIS layer from the PostGIS database using a provided database engine,
+    reprojects it to WGS 84 (EPSG:4326), and returns it as a GeoJSON string.
     Recognizes layer names like 'parcels', 'buildings', 'parcels_low', 'buildings_low'.
     """
-    print(f"Tool 'get_layer_as_geojson' called with raw input: '{layer_name}' and data_path: '{data_path}'")
-
-    if not data_path or not os.path.exists(data_path):
-        return "Error: Server-side configuration error. The data directory is not configured correctly."
+    print(f"Tool 'get_layer_as_geojson' called with layer_name: '{layer_name}'")
 
     normalized_input = layer_name.lower().strip()
     base_layer_name = None
@@ -25,28 +22,29 @@ def get_layer_as_geojson(layer_name: str, data_path: str) -> str:
     if not base_layer_name:
         return f"Error: Could not identify a valid layer name in the input: '{layer_name}'. Please ask for 'parcels' or 'buildings'."
 
-    preferred_path = os.path.join(data_path, f"{base_layer_name}_low.shp")
-    fallback_path = os.path.join(data_path, f"{base_layer_name}.shp")
-    
-    shapefile_path_to_use = None
-    if os.path.exists(preferred_path):
-        shapefile_path_to_use = preferred_path
-    elif os.path.exists(fallback_path):
-        shapefile_path_to_use = fallback_path
-    else:
-        return f"Error: Shapefile for layer '{base_layer_name}' not found in data directory at path {data_path}."
+    table_to_use = f"{base_layer_name}_low"
+    print(f"Attempting to query table: '{table_to_use}'")
 
     try:
-        print(f"Attempting to read shapefile from: {shapefile_path_to_use}")
-        gdf = gpd.read_file(shapefile_path_to_use)
+        sql = f'SELECT * FROM "{table_to_use}";'
+        gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
         
-        # --- REPROJECTION STEP ---
-        # Reproject the data to WGS 84 (EPSG:4326), which is the standard for web maps.
-        print(f"Original CRS: {gdf.crs}")
+        print(f"Successfully read {len(gdf)} features from table '{table_to_use}'.")
+        
         gdf_reprojected = gdf.to_crs(epsg=4326)
-        print(f"Reprojected to CRS: {gdf_reprojected.crs}")
-        
-        gdf_reprojected['loaded_layer'] = os.path.basename(shapefile_path_to_use)
+        gdf_reprojected['loaded_layer'] = table_to_use
         return gdf_reprojected.to_json()
+        
     except Exception as e:
-        return f"Error during reprojection or file processing: {e}"
+        print(f"Could not read from '{table_to_use}', trying full resolution. Error: {e}")
+        table_to_use = base_layer_name
+        try:
+            sql = f'SELECT * FROM "{table_to_use}";'
+            gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
+            print(f"Successfully read {len(gdf)} features from fallback table '{table_to_use}'.")
+            
+            gdf_reprojected = gdf.to_crs(epsg=4326)
+            gdf_reprojected['loaded_layer'] = table_to_use
+            return gdf_reprojected.to_json()
+        except Exception as final_e:
+            return f"Error processing data from database: {final_e}"

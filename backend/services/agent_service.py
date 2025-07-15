@@ -1,28 +1,10 @@
-from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
-from pathlib import Path
-import json
-import os
 
 from tools.gis_tools import get_layer_as_geojson
-
-# --- Path and Environment Configuration ---
-project_root = Path(__file__).parent.parent.parent
-dotenv_path = project_root / ".env"
-DATA_PATH = project_root / "sample_data"
-
-print(f"Loading .env file from: {dotenv_path}")
-load_dotenv(dotenv_path=dotenv_path)
-
-print(f"Data path resolved to: {DATA_PATH}")
-if not DATA_PATH.exists():
-    print("="*80)
-    print(f"CRITICAL ERROR: The data directory does not exist at the resolved path: {DATA_PATH}")
-    print("="*80)
-
+from database import engine  # Import the configured database engine
 
 # --- LLM Configuration ---
 llm = ChatGroq(model_name="llama3-8b-8192", temperature=0)
@@ -74,9 +56,8 @@ def process_query(query: str) -> dict:
             if not layer_name:
                 return {"type": "text", "data": "Widzę, że prosisz o dane, ale nie sprecyzowałeś które. Spróbuj 'pokaż działki' lub 'pokaż budynki'."}
             
-            # --- CORRECT WAY TO CALL A LANGCHAIN TOOL ---
-            # Use the .invoke() method to properly call the tool
-            tool_input = {"layer_name": layer_name, "data_path": str(DATA_PATH)}
+            # Pass the database engine to the tool
+            tool_input = {"layer_name": layer_name, "db_engine": engine}
             geojson_data = get_layer_as_geojson.invoke(tool_input)
             
             if "Error:" in geojson_data:
