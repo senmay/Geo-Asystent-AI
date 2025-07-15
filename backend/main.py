@@ -11,10 +11,7 @@ app = FastAPI(
 # --- CORRECT CORS Configuration ---
 # We explicitly list the origins that are allowed to connect.
 # Using a wildcard "*" is not recommended for production and can cause issues.
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,

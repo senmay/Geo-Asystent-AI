@@ -28,6 +28,7 @@ function App() {
   const [geojson, setGeojson] = useState<GeoJsonObject | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('handleSubmit called');
     e.preventDefault();
     if (!input.trim()) return;
 
