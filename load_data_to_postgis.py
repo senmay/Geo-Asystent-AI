@@ -44,30 +44,30 @@ def load_data():
         print(f"No shapefiles found in '{data_dir}'.")
         return
 
-    print(f"Found shapefiles to load: {shapefiles}")
+print(f"Found shapefiles to load: {shapefiles}")
 
-    for shp_file in shapefiles:
-        try:
-            file_path = data_dir / shp_file
-            print(f"\nReading {file_path}...")
-            gdf = gpd.read_file(file_path)
-            
-            table_name = file_path.stem
-            
-            print(f"Loading data into table '{table_name}'...")
-            
-            gdf.to_postgis(
-                name=table_name,
-                con=engine,
-                if_exists="replace",
-                index=True,
-                index_label='id'
-            )
-            
-            print(f"Successfully loaded {len(gdf)} features into '{table_name}'.")
+for shp_file in shapefiles:
+    try:
+        file_path = data_dir / shp_file
+        print(f"Reading {file_path}...")
+        gdf = gpd.read_file(file_path)
+        
+        table_name = file_path.stem
+        
+        print(f"Loading data into table '{table_name}'...")
+        
+        gdf.to_postgis(
+            name=table_name,
+            con=engine,
+            if_exists="replace",
+            index=True,
+            index_label='id'
+        )
+        
+        print(f"Successfully loaded {len(gdf)} features into '{table_name}'.")
 
-        except Exception as e:
-            print(f"Failed to load {shp_file}. Error: {e}")
+    except Exception as e:
+        print(f"Failed to load {shp_file}. Error: {e}")
 
 if __name__ == "__main__":
     load_data()
