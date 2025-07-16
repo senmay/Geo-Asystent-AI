@@ -21,16 +21,26 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
     elif "building" in normalized_input or "budynki" in normalized_input:
         base_layer_name = "buildings"
         id_column = "ID_BUDYNKU"
+    elif "gpz" in normalized_input:
+        base_layer_name = "gpz_110kv"
+        id_column = "id"
     
     if not base_layer_name:
         return f"Error: Could not identify a valid layer name in the input: '{layer_name}'. Please ask for 'parcels' or 'buildings'."
 
-    table_to_use = f"{base_layer_name}_low"
+    # GPZ layer doesn't have a _low version
+    if base_layer_name == "gpz_110kv":
+        table_to_use = base_layer_name
+    else:
+        table_to_use = f"{base_layer_name}_low"
     print(f"Attempting to query table: '{table_to_use}'")
 
     try:
         sql = f'SELECT * FROM "{table_to_use}";'
-        gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
+        
+        # Handle different geometry column names
+        geom_col = 'geom' if base_layer_name == "gpz_110kv" else 'geometry'
+        gdf = gpd.read_postgis(sql, db_engine, geom_col=geom_col)
         
         print(f"Successfully read {len(gdf)} features from table '{table_to_use}'.")
         
@@ -171,3 +181,51 @@ def find_parcels_above_area(min_area: float, db_engine: Engine) -> str:
         return gdf_reprojected.to_json()
     except Exception as e:
         return f"Error finding parcels above {min_area} m²: {e}"
+
+@tool
+def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
+    """
+    Finds all parcels within a specified radius of any GPZ point.
+    The result includes each parcel's ID and its area.
+    The radius is specified in meters.
+    """
+    print(f"Tool 'find_parcels_near_gpz' called with radius_meters={radius_meters}.")
+
+    parcels_table = "parcels_low"
+    gpz_table = "gpz_110kv"
+
+    # This SQL query uses a subquery with ST_DWithin for efficient spatial filtering.
+    # It finds all parcels where the distance to any GPZ is within the specified radius.
+    # NOTE: This assumes both layers are in the same CRS in the database.
+    # If not, a transform would be needed, but ST_DWithin is much faster on projected CRS.
+    sql = f"""
+        SELECT p.*, ST_Area(p.geometry) as area_sqm
+        FROM "{parcels_table}" p
+        WHERE EXISTS (
+            SELECT 1
+            FROM "{gpz_table}" g
+            WHERE ST_DWithin(p.geometry, g.geom, {radius_meters})
+        );
+    """
+
+    try:
+        gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
+        if gdf.empty:
+            return f"Info: No parcels found within {radius_meters} meters of any GPZ."
+
+        print(f"Found {len(gdf)} parcels within {radius_meters}m of a GPZ.")
+
+        gdf_reprojected = gdf.to_crs(epsg=4326)
+
+        messages = []
+        for index, row in gdf.iterrows():
+            parcel_id = row.get('ID_DZIALKI', 'Brak ID')
+            area_sqm = row['area_sqm']
+            area_ha = area_sqm / 10000
+            messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+
+        gdf_reprojected['message'] = messages
+
+        return gdf_reprojected.to_json()
+    except Exception as e:
+        return f"Error finding parcels near GPZ: {e}"

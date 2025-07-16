@@ -37,3 +37,9 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_db_engine():
+    """
+    Dependency to get the database engine directly.
+    """
+    return engine

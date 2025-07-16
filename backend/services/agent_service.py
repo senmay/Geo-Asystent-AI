@@ -4,7 +4,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import Literal, Union
 
-from tools.gis_tools import get_layer_as_geojson, find_largest_parcel, find_n_largest_parcels, find_parcels_above_area
+from tools.gis_tools import get_layer_as_geojson, find_largest_parcel, find_n_largest_parcels, find_parcels_above_area, find_parcels_near_gpz
 from database import engine
 
 # --- LLM Configuration ---
@@ -30,13 +30,18 @@ class FindParcelsAboveArea(BaseModel):
     intent: Literal['find_parcels_above_area'] = "find_parcels_above_area"
     min_area: float = Field(description="Minimalna powierzchnia w metrach kwadratowych.")
 
+class FindParcelsNearGpz(BaseModel):
+    """Użytkownik chce znaleźć działki w określonej odległości od GPZ."""
+    intent: Literal['find_parcels_near_gpz'] = "find_parcels_near_gpz"
+    radius_meters: int = Field(description="Promień w metrach od GPZ.")
+
 class Chat(BaseModel):
     """Użytkownik prowadzi luźną rozmowę, zadaje ogólne pytanie lub jego intencja jest niejasna."""
     intent: Literal['chat'] = "chat"
 
 # --- Union of all possible routes ---
 class Route(BaseModel):
-    route: Union[GetGisData, FindLargestParcel, FindNLargestParcels, FindParcelsAboveArea, Chat]
+    route: Union[GetGisData, FindLargestParcel, FindNLargestParcels, FindParcelsAboveArea, FindParcelsNearGpz, Chat]
 
 # --- Intent Classification Logic ---
 parser = JsonOutputParser(pydantic_object=Route)
