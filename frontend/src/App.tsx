@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { MapContainer, TileLayer } from 'react-leaflet';
-import GeoJsonLayer from './GeoJsonLayer';
+import GeoJsonLayer from './GeoJsonLayer'; // This will now import CleanGeoJsonLayer
 import LayerControl, { type LayerState } from './LayerControl';
 import 'leaflet/dist/leaflet.css';
 import './App.css';
@@ -141,7 +141,7 @@ function App() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
           {layers.map((layer) =>
-            layer.visible && <GeoJsonLayer key={layer.id} data={layer.data} />
+            layer.visible && <GeoJsonLayer key={layer.id} data={layer.data} layerName={layer.name} />
           )}
           {queryGeojson && <GeoJsonLayer data={queryGeojson} color="#FF0000" />} {/* Highlight query results in red */}
           <LayerControl layers={layers} onToggleLayer={handleToggleLayer} />
