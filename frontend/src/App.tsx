@@ -16,9 +16,9 @@ function App() {
     const fetchInitialLayers = async () => {
       try {
         const initialLayerNames = [
-          { name: 'GPZ 110kV', apiName: 'gpz_110kv' },
-          { name: 'Budynki', apiName: 'buildings' },
-          { name: 'Działki', apiName: 'parcels' },
+          { name: 'GPZ 110kV', apiName: 'gpz_110kv', color: '#ff0000' }, // Red for GPZ
+          { name: 'Budynki', apiName: 'buildings', color: '#3388ff' }, // Leaflet blue for Buildings
+          { name: 'Działki', apiName: 'parcels', color: '#00ff00' }, // Green for Parcels
         ];
 
         const layerPromises = initialLayerNames.map(layerInfo =>
@@ -32,6 +32,7 @@ function App() {
           name: initialLayerNames[index].name,
           data: response.data,
           visible: true,
+          color: initialLayerNames[index].color, // Pass the color to LayerState
         }));
 
         setLayers(initialLayers);

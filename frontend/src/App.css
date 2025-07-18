@@ -128,6 +128,33 @@ body, html, #root {
   margin-right: 5px;
 }
 
+.layer-control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 5px;
+}
+
+.layer-control-header h4 {
+  margin: 0;
+}
+
+.toggle-icon {
+  font-size: 0.8em;
+  margin-left: 10px;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #ccc;
+  margin-right: 5px;
+  vertical-align: middle;
+}
 
 .chat-input-form button:hover {
   opacity: 0.9;
