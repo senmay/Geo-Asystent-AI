@@ -2,6 +2,18 @@ import geopandas as gpd
 from langchain.tools import tool
 import os
 from sqlalchemy.engine import Engine
+import logging
+
+from exceptions import (
+    LayerNotFoundError,
+    InvalidLayerNameError,
+    GISDataProcessingError,
+    DatabaseConnectionError,
+    SpatialQueryError
+)
+from utils.db_logger import log_database_operation
+
+logger = logging.getLogger(__name__)
 
 @tool
 def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
@@ -10,11 +22,12 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
     reprojects it to WGS 84 (EPSG:4326), and returns it as a GeoJSON string.
     Recognizes layer names like 'parcels', 'buildings', 'parcels_low', 'buildings_low'.
     """
-    print(f"Tool 'get_layer_as_geojson' called with layer_name: '{layer_name}'")
+    logger.info(f"Retrieving layer: '{layer_name}'")
 
     normalized_input = layer_name.lower().strip()
     base_layer_name = None
     id_column = None
+    
     if "parcel" in normalized_input or "działki" in normalized_input:
         base_layer_name = "parcels"
         id_column = "ID_DZIALKI"
@@ -26,40 +39,70 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
         id_column = "id"
     
     if not base_layer_name:
-        return f"Error: Could not identify a valid layer name in the input: '{layer_name}'. Please ask for 'parcels' or 'buildings'."
+        raise InvalidLayerNameError(
+            layer_name=layer_name,
+            valid_patterns=["działki", "budynki", "gpz"]
+        )
 
     # GPZ layer doesn't have a _low version
     if base_layer_name == "gpz_110kv":
         table_to_use = base_layer_name
     else:
         table_to_use = f"{base_layer_name}_low"
-    print(f"Attempting to query table: '{table_to_use}'")
+    
+    logger.debug(f"Querying table: '{table_to_use}'")
 
     try:
         sql = f'SELECT * FROM "{table_to_use}";'
         
         # Handle different geometry column names
         geom_col = 'geom' if base_layer_name == "gpz_110kv" else 'geometry'
-        gdf = gpd.read_postgis(sql, db_engine, geom_col=geom_col)
         
-        print(f"Successfully read {len(gdf)} features from table '{table_to_use}'.")
+        try:
+            gdf = gpd.read_postgis(sql, db_engine, geom_col=geom_col)
+        except Exception as e:
+            raise DatabaseConnectionError(
+                operation=f"reading from table '{table_to_use}'",
+                original_error=e
+            )
         
-        gdf_reprojected = gdf.to_crs(epsg=4326)
-        gdf_reprojected['loaded_layer'] = table_to_use
+        if gdf.empty:
+            raise LayerNotFoundError(layer_name=layer_name)
         
-        # Add a message with the ID
-        if id_column and id_column in gdf.columns:
-            gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
+        logger.info(f"Successfully read {len(gdf)} features from table '{table_to_use}'")
         
-        return gdf_reprojected.to_json()
+        try:
+            gdf_reprojected = gdf.to_crs(epsg=4326)
+            gdf_reprojected['loaded_layer'] = table_to_use
+            
+            # Add a message with the ID
+            if id_column and id_column in gdf.columns:
+                gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
+            
+            return gdf_reprojected.to_json()
+            
+        except Exception as e:
+            raise GISDataProcessingError(
+                operation="coordinate transformation and GeoJSON conversion",
+                original_error=e
+            )
         
+    except (InvalidLayerNameError, LayerNotFoundError, DatabaseConnectionError, GISDataProcessingError):
+        # Re-raise our custom exceptions
+        raise
     except Exception as e:
-        print(f"Could not read from '{table_to_use}', trying full resolution. Error: {e}")
+        # Try fallback to full resolution table
+        logger.warning(f"Failed to read from '{table_to_use}', trying full resolution table")
         table_to_use = base_layer_name
+        
         try:
             sql = f'SELECT * FROM "{table_to_use}";'
             gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
-            print(f"Successfully read {len(gdf)} features from fallback table '{table_to_use}'.")
+            
+            if gdf.empty:
+                raise LayerNotFoundError(layer_name=layer_name)
+            
+            logger.info(f"Successfully read {len(gdf)} features from fallback table '{table_to_use}'")
             
             gdf_reprojected = gdf.to_crs(epsg=4326)
             gdf_reprojected['loaded_layer'] = table_to_use
@@ -68,8 +111,12 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
                 gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
 
             return gdf_reprojected.to_json()
+            
         except Exception as final_e:
-            return f"Error processing data from database: {final_e}"
+            raise GISDataProcessingError(
+                operation=f"reading from fallback table '{table_to_use}'",
+                original_error=final_e
+            )
 
 @tool
 def find_largest_parcel(db_engine: Engine) -> str:
@@ -77,7 +124,7 @@ def find_largest_parcel(db_engine: Engine) -> str:
     Finds the single largest parcel by area and returns it as a GeoJSON string.
     The result also includes the parcel's ID and its area in square meters.
     """
-    print("Tool 'find_largest_parcel' called.")
+    logger.info("Finding largest parcel")
     
     table_name = "parcels_low"
     
@@ -89,21 +136,36 @@ def find_largest_parcel(db_engine: Engine) -> str:
     """
     
     try:
-        gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
-        if gdf.empty:
-            return "Error: Could not find any parcels in the database."
+        with log_database_operation("find_largest_parcel", table=table_name):
+            gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
             
-        print(f"Found largest parcel with ID: {gdf.iloc[0].get('ID_DZIALKI', 'N/A')}")
+        if gdf.empty:
+            raise LayerNotFoundError(layer_name="parcels", available_layers=["parcels_low", "parcels"])
+            
+        logger.info(f"Found largest parcel with ID: {gdf.iloc[0].get('ID_DZIALKI', 'N/A')}")
         
-        gdf_reprojected = gdf.to_crs(epsg=4326)
-        parcel_id = gdf.iloc[0].get('ID_DZIALKI', 'Brak ID')
-        area_sqm = gdf.iloc[0]['area_sqm']
-        area_ha = area_sqm / 10000
-        gdf_reprojected['message'] = f"Największa działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha"
-        
-        return gdf_reprojected.to_json()
+        try:
+            gdf_reprojected = gdf.to_crs(epsg=4326)
+            parcel_id = gdf.iloc[0].get('ID_DZIALKI', 'Brak ID')
+            area_sqm = gdf.iloc[0]['area_sqm']
+            area_ha = area_sqm / 10000
+            gdf_reprojected['message'] = f"Największa działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha"
+            
+            return gdf_reprojected.to_json()
+            
+        except Exception as e:
+            raise GISDataProcessingError(
+                operation="coordinate transformation and GeoJSON conversion for largest parcel",
+                original_error=e
+            )
+            
+    except (LayerNotFoundError, GISDataProcessingError):
+        raise
     except Exception as e:
-        return f"Error finding the largest parcel: {e}"
+        raise DatabaseConnectionError(
+            operation=f"finding largest parcel in table '{table_name}'",
+            original_error=e
+        )
 
 @tool
 def find_n_largest_parcels(n: int, db_engine: Engine) -> str:

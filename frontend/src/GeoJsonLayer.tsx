@@ -3,28 +3,8 @@ import { useMap, GeoJSON, CircleMarker, Tooltip } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import L from 'leaflet';
 import { getPathStyle, getPointStyle, highlightPointStyle } from './mapStyles';
-
-interface GeoJsonFeature {
-  type: 'Feature';
-  geometry: {
-    type: string;
-    coordinates: number[];
-  };
-  properties?: {
-    name?: string;
-    [key: string]: any;
-  };
-}
-
-interface GeoJsonData {
-  type: 'FeatureCollection';
-  features: GeoJsonFeature[];
-}
-
-interface GeoJsonLayerProps {
-  data: GeoJsonData;
-  layerName?: string;
-}
+import type { GeoJsonLayerProps } from './types/components';
+import type { PointGeometry } from './types/map';
 
 const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
   const map = useMap();
@@ -36,13 +16,14 @@ const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
   // FitBounds na wszystkie geometrie (punkty + inne)
   useEffect(() => {
     const all = L.featureGroup([
-      L.geoJSON(others),
-      L.featureGroup(points.map(f =>
-        L.circleMarker(
-          [f.geometry.coordinates[1], f.geometry.coordinates[0]],
-          getPointStyle(layerName)
-        )
-      ))
+      L.geoJSON({ type: 'FeatureCollection', features: others } as any),
+      L.featureGroup(points.map(f => {
+        const pointGeom = f.geometry as PointGeometry;
+        return L.circleMarker(
+          [pointGeom.coordinates[1], pointGeom.coordinates[0]],
+          { ...getPointStyle(layerName), radius: getPointStyle(layerName).radius ?? 8 }
+        );
+      }))
     ]);
     if (all.getBounds().isValid()) {
       map.fitBounds(all.getBounds());
@@ -54,7 +35,7 @@ const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
       {/* 1. Linie i poligony */}
       {others.length > 0 && (
         <GeoJSON
-          data={others}
+          data={{ type: 'FeatureCollection', features: others } as any}
           style={() => getPathStyle(layerName)}
         />
       )}
@@ -63,7 +44,8 @@ const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
       {points.length > 0 && (
         <MarkerClusterGroup>
           {points.map((f, i) => {
-            const pos: L.LatLngExpression = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+            const pointGeom = f.geometry as PointGeometry;
+            const pos: L.LatLngExpression = [pointGeom.coordinates[1], pointGeom.coordinates[0]];
             const style = getPointStyle(layerName);
             return (
               <CircleMarker

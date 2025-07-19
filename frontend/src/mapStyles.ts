@@ -1,16 +1,8 @@
 import L from 'leaflet';
+import type { PointStyleOptions, PathStyleOptions } from './types/components';
 
 // --- Point Styles ---
 // Defines the appearance of circle markers for different layers.
-
-interface PointStyleOptions {
-    radius: number;
-    fillColor: string;
-    color: string; // border color
-    weight: number;
-    opacity: number;
-    fillOpacity: number;
-}
 
 const defaultPointStyle: PointStyleOptions = {
     radius: 6,
@@ -51,16 +43,12 @@ export const getPointStyle = (layerName?: string): PointStyleOptions => {
 // Helper function to create a marker with the correct style
 export const createStyledCircleMarker = (latlng: L.LatLng, layerName?: string): L.CircleMarker => {
     const style = getPointStyle(layerName);
-    return L.circleMarker(latlng, style);
+    return L.circleMarker(latlng, { ...style, radius: style.radius ?? 8 });
 };
 
 
 // --- Line and Polygon Styles ---
 // Defines the appearance of lines and polygons.
-
-interface PathStyleOptions extends L.PathOptions {
-    // We can add custom properties here if needed in the future
-}
 
 const defaultPathStyle: PathStyleOptions = {
     color: "#3388ff", // leaflet blue

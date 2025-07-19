@@ -13,3 +13,9 @@ psycopg2-binary
 # Testing
 pytest
 pytest-cov
+pytest-asyncio
+pytest-mock
+pytest-xdist
+factory-boy
+faker
+httpx

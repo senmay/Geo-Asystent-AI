@@ -1,105 +1,69 @@
 
 import React, { useState } from 'react';
-import axios from 'axios';
-
-interface Message {
-  sender: 'user' | 'bot';
-  text: string;
-  type?: 'info' | 'data';
-}
-
-const intentToFriendlyName: { [key: string]: string } = {
-  get_gis_data: 'Pobieranie warstwy GIS',
-  find_largest_parcel: 'Wyszukiwanie największej działki',
-  find_n_largest_parcels: 'Wyszukiwanie N największych działek',
-  find_parcels_above_area: 'Wyszukiwanie działek powyżej określonej powierzchni',
-  find_parcels_near_gpz: 'Wyszukiwanie działek w pobliżu GPZ',
-  chat: 'Rozmowa ogólna',
-};
-
-interface ChatProps {
-  setQueryGeojson: (geojson: any) => void;
-}
+import { useChat } from './hooks';
+import { ErrorBanner, ChatHistory, ChatInput } from './components';
+import type { ChatProps } from './types/components';
 
 const Chat: React.FC<ChatProps> = ({ setQueryGeojson }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const { messages, sendMessage, isLoading, error, clearError } = useChat(setQueryGeojson);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const handleSubmit = async () => {
+    if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = { sender: 'user', text: input };
-    setMessages((prev) => [...prev, userMessage]);
     const currentInput = input;
     setInput('');
-    setQueryGeojson(null); // Clear previous query results
+    clearError();
 
-    try {
-      const response = await axios.post('http://127.0.0.1:8000/api/v1/chat', {
-        query: currentInput,
-      });
-
-      const { type, data, intent } = response.data;
-
-      if (intent && intentToFriendlyName[intent]) {
-        const infoMessage: Message = {
-          sender: 'bot',
-          text: `Używam narzędzia: "${intentToFriendlyName[intent]}"`,
-          type: 'info',
-        };
-        setMessages((prev) => [...prev, infoMessage]);
-      }
-
-      if (type === 'geojson') {
-        const geojsonData = JSON.parse(data);
-        setQueryGeojson(geojsonData); // Set query result
-
-        const messagesFromFeatures = geojsonData.features
-          ?.map((feature: any) => feature.properties?.message)
-          .filter(Boolean);
-
-        let botMessageText;
-        if (messagesFromFeatures?.length > 0) {
-          botMessageText = messagesFromFeatures.join('\n');
-        } else {
-          botMessageText = `Wyświetlono ${geojsonData.features?.length || 0} obiektów na mapie.`;
-        }
-
-        const botMessage: Message = { sender: 'bot', text: botMessageText, type: 'data' };
-        setMessages((prev) => [...prev, botMessage]);
-      } else {
-        const botMessage: Message = { sender: 'bot', text: data, type: 'data' };
-        setMessages((prev) => [...prev, botMessage]);
-      }
-    } catch (error) {
-      console.error('Error communicating with backend:', error);
-      const errorMessage: Message = {
-        sender: 'bot',
-        text: 'Wystąpił błąd podczas komunikacji z serwerem.',
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    }
+    await sendMessage(currentInput);
   };
 
   return (
-    <div className="chat-pane">
-      <div className="chat-history">
-        {messages.map((msg, index) => (
-          <div key={index} className={`chat-message ${msg.sender}`}>
-            {msg.text}
-          </div>
-        ))}
+    <div 
+      className="chat-pane"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        backgroundColor: '#fff',
+        borderLeft: '1px solid #e0e0e0'
+      }}
+    >
+      <div 
+        className="chat-header"
+        style={{
+          padding: '16px',
+          borderBottom: '1px solid #e0e0e0',
+          backgroundColor: '#f8f9fa'
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
+          Asystent GIS
+        </h3>
+        <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#666' }}>
+          Zadaj pytanie o dane przestrzenne
+        </p>
       </div>
-      <form onSubmit={handleSubmit} className="chat-input-form">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Zapytaj o dane GIS..."
-        />
-        <button type="submit">Wyślij</button>
-      </form>
+
+      <ErrorBanner 
+        error={error} 
+        onDismiss={clearError}
+        type="error"
+      />
+      
+      <ChatHistory 
+        messages={messages}
+        isLoading={isLoading}
+        loadingMessage="Przetwarzam zapytanie..."
+      />
+      
+      <ChatInput
+        value={input}
+        onChange={setInput}
+        onSubmit={handleSubmit}
+        disabled={isLoading}
+        placeholder="Zapytaj o dane GIS..."
+      />
     </div>
   );
 };

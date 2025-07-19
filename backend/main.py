@@ -1,33 +1,50 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import chat, layers
+from config import get_settings
+from middleware import setup_exception_handlers, setup_logging_middleware, setup_monitoring_middleware
+from api.routers import chat_router, layers_router
+
+# Get application settings
+settings = get_settings()
 
 app = FastAPI(
-    title="Geo-Asystent AI",
-    description="Backend for the GIS AI Assistant",
-    version="1.0.0"
+    title=settings.app_name,
+    description=settings.app_description,
+    version=settings.app_version,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
 )
 
-# --- CORRECT CORS Configuration ---
-# We explicitly list the origins that are allowed to connect.
-# Using a wildcard "*" is not recommended for production and can cause issues.
-origins = ["*"]
+# Set up logging middleware (should be first)
+setup_logging_middleware(app)
 
+# Set up monitoring middleware
+setup_monitoring_middleware(app)
+
+# Set up error handling
+setup_exception_handlers(app)
+
+# CORS Configuration using centralized settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.api.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(chat.router)
-app.include_router(layers.router)
+app.include_router(chat_router)
+app.include_router(layers_router)
 
+# Root endpoint
 @app.get("/")
-def read_root():
-    """
-    Root endpoint providing a welcome message.
-    """
-    return {"message": "Welcome to Geo-Asystent AI Backend - CORS Fixed Edition"}
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "app_name": settings.app_name,
+        "version": settings.app_version,
+        "docs_url": "/api/docs",
+        "api_prefix": "/api/v1"
+    }
