@@ -1,3 +1,4 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer } from 'react-leaflet';
 import GeoJsonLayer from './GeoJsonLayer';
 import LayerControl from './LayerControl';
@@ -18,6 +19,37 @@ const App: React.FC<AppProps> = ({ className, style }) => {
     isLoading,
     clearError
   } = useMapLayers();
+
+  const [chatWidth, setChatWidth] = useState(400); // Initial width
+  const isResizing = useRef(false);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    isResizing.current = true;
+    e.preventDefault();
+  };
+
+  const handleMouseUp = () => {
+    isResizing.current = false;
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isResizing.current) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 300 && newWidth < 800) { // Min and max width
+        setChatWidth(newWidth);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove]);
 
   return (
     <div className={`app-container ${className || ''}`} style={style}>
@@ -40,7 +72,6 @@ const App: React.FC<AppProps> = ({ className, style }) => {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
           
-          {/* Render visible layers */}
           {layers
             .filter(layer => layer.visible && !layer.loading && !layer.error)
             .map((layer) => (
@@ -54,7 +85,6 @@ const App: React.FC<AppProps> = ({ className, style }) => {
             ))
           }
           
-          {/* Render query results */}
           {queryResult && (
             <GeoJsonLayer 
               data={queryResult} 
@@ -71,7 +101,10 @@ const App: React.FC<AppProps> = ({ className, style }) => {
         </MapContainer>
       </div>
       
-      <Chat setQueryGeojson={setQueryResult} />
+      <div className="chat-container" style={{ width: chatWidth }}>
+        <div className="resizer" onMouseDown={handleMouseDown}></div>
+        <Chat setQueryGeojson={setQueryResult} />
+      </div>
     </div>
   );
 };

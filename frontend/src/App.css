@@ -22,8 +22,26 @@ body, html, #root {
 }
 
 .map-pane {
-  flex: 2;
+  flex: 1;
+  position: relative;
   height: 100%;
+}
+
+.chat-container {
+  display: flex;
+  position: relative;
+  height: 100%;
+}
+
+.resizer {
+  width: 5px;
+  cursor: col-resize;
+  background: #ccc;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 1001;
 }
 
 .chat-pane {
@@ -33,7 +51,10 @@ body, html, #root {
   background-color: var(--chat-bg);
   border-left: 1px solid var(--border-color);
   height: 100%;
+  min-width: 300px; /* Same as min width in JS */
 }
+
+
 
 .chat-history {
   flex-grow: 1;
