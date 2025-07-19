@@ -69,6 +69,7 @@ export interface GeoJsonLayerProps {
   style?: MapStyleOptions;
   onFeatureClick?: (feature: any, layer: any) => void;
   onFeatureHover?: (feature: any, layer: any) => void;
+  fitBounds?: boolean;
 }
 
 // Map-related component types

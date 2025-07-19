@@ -31,8 +31,8 @@ const App: React.FC<AppProps> = ({ className, style }) => {
       
       <div className="map-pane">
         <MapContainer 
-          center={[52.237049, 21.017532]} 
-          zoom={13} 
+          center={[52.23, 21.01]} // Center of Poland
+          zoom={6} 
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
@@ -49,6 +49,7 @@ const App: React.FC<AppProps> = ({ className, style }) => {
                 data={layer.data} 
                 layerName={layer.name}
                 color={layer.color}
+                fitBounds={false} 
               />
             ))
           }
@@ -58,7 +59,8 @@ const App: React.FC<AppProps> = ({ className, style }) => {
             <GeoJsonLayer 
               data={queryResult} 
               layerName="Query Results"
-              color="#FF0000" 
+              color="#FF0000"
+              fitBounds={true}
             />
           )}
           

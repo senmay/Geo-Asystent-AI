@@ -14,7 +14,7 @@ from exceptions import (
     DatabaseConnectionError,
     SpatialQueryError
 )
-from backend.utils.db_logger import log_database_operation
+from utils.db_logger import log_database_operation
 
 
 @dataclass

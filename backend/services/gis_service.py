@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 from repositories import GISRepository
 from models.domain import ParcelCriteria, QueryResult, GISOperationResult
 from exceptions import GeoAsystentException, GISDataProcessingError, SpatialQueryError
-from backend.utils.db_logger import log_gis_operation
+from utils.db_logger import log_gis_operation
 
 logger = logging.getLogger(__name__)
 

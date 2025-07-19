@@ -273,9 +273,10 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
     try:
         gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
         if gdf.empty:
-            return f"Info: No parcels found within {radius_meters} meters of any GPZ."
+            logger.info(f"No parcels found within {radius_meters}m of a GPZ, returning empty GeoJSON.")
+            return '{"type": "FeatureCollection", "features": []}'
 
-        print(f"Found {len(gdf)} parcels within {radius_meters}m of a GPZ.")
+        logger.info(f"Found {len(gdf)} parcels within {radius_meters}m of a GPZ.")
 
         gdf_reprojected = gdf.to_crs(epsg=4326)
 
@@ -290,4 +291,7 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
 
         return gdf_reprojected.to_json()
     except Exception as e:
-        return f"Error finding parcels near GPZ: {e}"
+        logger.error(f"Error in find_parcels_near_gpz tool: {e}", exc_info=True)
+        # Re-raise the exception to be handled by the agent/caller,
+        # which should result in a proper JSON error response.
+        raise

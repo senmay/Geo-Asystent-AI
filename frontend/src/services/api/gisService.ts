@@ -46,13 +46,12 @@ export class GISService {
     if (useLowResolution !== undefined) {
       params.append('use_low_resolution', useLowResolution.toString());
     }
-
+  
     const url = `${API_ENDPOINTS.LAYERS.BY_NAME(layerName)}${params.toString() ? `?${params.toString()}` : ''}`;
-    
-    const response = await this.apiClient.get<string>(url, {}, options);
-    
-    // The backend returns GeoJSON as a string, so we need to parse it
-    return JSON.parse(response.data) as GeoJsonFeatureCollection;
+  
+    const response = await this.apiClient.get<GeoJsonFeatureCollection>(url, {}, options);
+  
+    return response.data as GeoJsonFeatureCollection;
   }
 
   /**

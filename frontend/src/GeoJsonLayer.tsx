@@ -6,7 +6,7 @@ import { getPathStyle, getPointStyle, highlightPointStyle } from './mapStyles';
 import type { GeoJsonLayerProps } from './types/components';
 import type { PointGeometry } from './types/map';
 
-const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
+const GeoJsonLayer = ({ data, layerName, fitBounds = true }: GeoJsonLayerProps) => {
   const map = useMap();
 
   // Rozdzielamy dane
@@ -15,6 +15,10 @@ const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
 
   // FitBounds na wszystkie geometrie (punkty + inne)
   useEffect(() => {
+    if (!fitBounds) {
+      return;
+    }
+    
     const all = L.featureGroup([
       L.geoJSON({ type: 'FeatureCollection', features: others } as any),
       L.featureGroup(points.map(f => {
@@ -28,7 +32,7 @@ const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
     if (all.getBounds().isValid()) {
       map.fitBounds(all.getBounds());
     }
-  }, [points, others, map, layerName]);
+  }, [points, others, map, layerName, fitBounds]);
 
   return (
     <>
@@ -42,7 +46,9 @@ const GeoJsonLayer = ({ data, layerName }: GeoJsonLayerProps) => {
 
       {/* 2. Punkty z klastrowaniem */}
       {points.length > 0 && (
-        <MarkerClusterGroup>
+        <MarkerClusterGroup
+          zoomToBoundsOnClick={false}
+        >
           {points.map((f, i) => {
             const pointGeom = f.geometry as PointGeometry;
             const pos: L.LatLngExpression = [pointGeom.coordinates[1], pointGeom.coordinates[0]];

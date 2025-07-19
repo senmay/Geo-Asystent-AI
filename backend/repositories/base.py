@@ -6,7 +6,7 @@ from sqlalchemy.engine import Engine
 import logging
 
 from exceptions import DatabaseConnectionError
-from backend.utils.db_logger import log_database_operation
+from utils.db_logger import log_database_operation
 
 logger = logging.getLogger(__name__)
 
