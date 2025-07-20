@@ -34,6 +34,12 @@ const GeoJsonLayer = ({ data, layerName, fitBounds = true }: GeoJsonLayerProps) 
     }
   }, [points, others, map, layerName, fitBounds]);
 
+  const onEachFeature = (feature: any, layer: L.Layer) => {
+    if (layerName === 'Województwa' && feature.properties && feature.properties.JPT_NAZWA_) {
+      layer.bindTooltip(feature.properties.JPT_NAZWA_, { permanent: true, direction: 'center', className: 'wojewodztwo-label' });
+    }
+  };
+
   return (
     <>
       {/* 1. Linie i poligony */}
@@ -41,6 +47,7 @@ const GeoJsonLayer = ({ data, layerName, fitBounds = true }: GeoJsonLayerProps) 
         <GeoJSON
           data={{ type: 'FeatureCollection', features: others } as any}
           style={() => getPathStyle(layerName)}
+          onEachFeature={onEachFeature}
         />
       )}
 

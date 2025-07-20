@@ -191,3 +191,13 @@ body, html, #root {
   font-weight: bold !important;
 
 }
+
+.wojewodztwo-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 30px;
+  border: none;
+  color: white;  
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+}
