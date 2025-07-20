@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Przewodnik Stylowania Warstw GIS - Geo-Asystent AI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+        }
+        .code-block {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .highlight {
+            background-color: #f39c12;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .warning {
+            background-color: #e74c3c;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .info {
+            background-color: #3498db;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #27ae60;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .color-sample {
+            width: 30px;
+            height: 20px;
+            display: inline-block;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        .toc {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 5px 0;
+        }
+        .toc a {
+            color: #2980b9;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Przewodnik Stylowania Warstw GIS</h1>
+        <p><strong>Geo-Asystent AI</strong> - Dokumentacja techniczna stylowania warstw mapowych</p>
+
+        <div class="toc">
+            <h3>📋 Spis treści</h3>
+            <ul>
+                <li><a href="#overview">1. Przegląd systemu warstw</a></li>
+                <li><a href="#geojson-styling">2. Stylowanie warstw GeoJSON</a></li>
+                <li><a href="#wms-styling">3. Konfiguracja warstw WMS</a></li>
+                <li><a href="#basemaps">4. Mapy podkładowe</a></li>
+                <li><a href="#colors">5. Paleta kolorów</a></li>
+                <li><a href="#popup-styling">6. Stylowanie popupów</a></li>
+                <li><a href="#controls">7. Kontrolki mapy</a></li>
+                <li><a href="#examples">8. Przykłady konfiguracji</a></li>
+            </ul>
+        </div>
+
+        <h2 id="overview">1. 🎯 Przegląd systemu warstw</h2>
+        <p>System Geo-Asystent AI obsługuje dwa główne typy warstw:</p>
+        <ul>
+            <li><strong>Warstwy GeoJSON</strong> - dane lokalne z bazy PostGIS</li>
+            <li><strong>Warstwy WMS</strong> - zewnętrzne usługi mapowe</li>
+        </ul>
+
+        <div class="info">
+            <strong>📍 Lokalizacja konfiguracji:</strong> Plik <code>frontend/src/hooks/useMapLayers.ts</code>
+        </div>
+
+        <h2 id="geojson-styling">2. 🎨 Stylowanie warstw GeoJSON</h2>
+        
+        <h3>Konfiguracja podstawowa</h3>
+        <div class="code-block">
+const DEFAULT_LAYERS: LayerConfig[] = [
+  {
+    name: 'Nazwa warstwy',
+    apiName: 'nazwa_tabeli_db',
+    color: '#ff0000',
+    type: 'geojson'
+  }
+];
+        </div>
+
+        <h3>Parametry stylowania</h3>
+        <table>
+            <tr>
+                <th>Parametr</th>
+                <th>Typ</th>
+                <th>Opis</th>
+                <th>Przykład</th>
+            </tr>
+            <tr>
+                <td>name</td>
+                <td>string</td>
+                <td>Nazwa wyświetlana w kontrolce warstw</td>
+                <td>'Działki ewidencyjne'</td>
+            </tr>
+            <tr>
+                <td>apiName</td>
+                <td>string</td>
+                <td>Nazwa tabeli w bazie danych</td>
+                <td>'parcels'</td>
+            </tr>
+            <tr>
+                <td>color</td>
+                <td>string</td>
+                <td>Kolor warstwy (hex, rgb, nazwa)</td>
+                <td>'#3388ff'</td>
+            </tr>
+            <tr>
+                <td>type</td>
+                <td>string</td>
+                <td>Typ warstwy</td>
+                <td>'geojson'</td>
+            </tr>
+        </table>
+
+        <h3>Stylowanie w mapStyles.ts</h3>
+        <div class="code-block">
+// Lokalizacja: frontend/src/mapStyles.ts
+
+export const getPathStyle = (layerName: string): PathOptions => {
+  const styles: { [key: string]: PathOptions } = {
+    'Działki przykładowe': {
+      color: '#00ff00',
+      weight: 2,
+      opacity: 0.8,
+      fillOpacity: 0.3
+    },
+    'Budynki przykładowe': {
+      color: '#3388ff',
+      weight: 1,
+      opacity: 0.9,
+      fillOpacity: 0.6
+    }
+  };
+  
+  return styles[layerName] || defaultStyle;
+};
+        </div>
+
+        <h2 id="wms-styling">3. 🌐 Konfiguracja warstw WMS</h2>
+        
+        <h3>Struktura konfiguracji WMS</h3>
+        <div class="code-block">
+const WMS_LAYERS: LayerConfig[] = [
+  {
+    name: 'Działki ewidencyjne z powiatów',
+    apiName: 'wms_dzialki',
+    color: '#ff6b35',
+    type: 'wms',
+    wmsConfig: {
+      url: 'https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
+      layers: 'dzialki',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.7
+    }
+  }
+];
+        </div>
+
+        <h3>Parametry WMS</h3>
+        <table>
+            <tr>
+                <th>Parametr</th>
+                <th>Typ</th>
+                <th>Opis</th>
+                <th>Wartość domyślna</th>
+            </tr>
+            <tr>
+                <td>url</td>
+                <td>string</td>
+                <td>URL serwisu WMS</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>layers</td>
+                <td>string</td>
+                <td>Nazwa warstwy WMS</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>format</td>
+                <td>string</td>
+                <td>Format obrazu</td>
+                <td>'image/png'</td>
+            </tr>
+            <tr>
+                <td>transparent</td>
+                <td>boolean</td>
+                <td>Przezroczystość tła</td>
+                <td>true</td>
+            </tr>
+            <tr>
+                <td>opacity</td>
+                <td>number</td>
+                <td>Przezroczystość warstwy (0-1)</td>
+                <td>1.0</td>
+            </tr>
+        </table>
+
+        <div class="warning">
+            <strong>⚠️ Uwaga:</strong> Warstwy WMS wymagają dostępu do internetu i mogą być wolniejsze niż warstwy lokalne.
+        </div>
+
+        <h2 id="basemaps">4. 🗺️ Mapy podkładowe</h2>
+        
+        <h3>Dostępne mapy podkładowe</h3>
+        <div class="code-block">
+const basemaps: BasemapOption[] = [
+  {
+    id: 'osm',
+    name: 'OpenStreetMap',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors'
+  },
+  {
+    id: 'satellite',
+    name: 'Satelitarna (Esri)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri'
+  }
+];
+        </div>
+
+        <h3>Dodawanie nowej mapy podkładowej</h3>
+        <div class="success">
+            <strong>✅ Krok po kroku:</strong>
+            <ol>
+                <li>Otwórz plik <code>frontend/src/App.tsx</code></li>
+                <li>Znajdź tablicę <code>basemaps</code></li>
+                <li>Dodaj nowy obiekt z konfiguracją</li>
+                <li>Zapisz i przeładuj aplikację</li>
+            </ol>
+        </div>
+
+        <h2 id="colors">5. 🎨 Paleta kolorów</h2>
+        
+        <h3>Zalecane kolory dla warstw</h3>
+        <table>
+            <tr>
+                <th>Typ warstwy</th>
+                <th>Kolor</th>
+                <th>Hex</th>
+                <th>Zastosowanie</th>
+            </tr>
+            <tr>
+                <td>Działki</td>
+                <td><span class="color-sample" style="background-color: #00ff00;"></span></td>
+                <td>#00ff00</td>
+                <td>Granice działek</td>
+            </tr>
+            <tr>
+                <td>Budynki</td>
+                <td><span class="color-sample" style="background-color: #3388ff;"></span></td>
+                <td>#3388ff</td>
+                <td>Kontury budynków</td>
+            </tr>
+            <tr>
+                <td>Infrastruktura</td>
+                <td><span class="color-sample" style="background-color: #ff0000;"></span></td>
+                <td>#ff0000</td>
+                <td>GPZ, stacje</td>
+            </tr>
+            <tr>
+                <td>Obszary chronione</td>
+                <td><span class="color-sample" style="background-color: #008000;"></span></td>
+                <td>#008000</td>
+                <td>Natura 2000</td>
+            </tr>
+            <tr>
+                <td>Granice administracyjne</td>
+                <td><span class="color-sample" style="background-color: #800080;"></span></td>
+                <td>#800080</td>
+                <td>Województwa</td>
+            </tr>
+        </table>
+
+        <h3>Generowanie kolorów</h3>
+        <div class="code-block">
+// Funkcja pomocnicza do generowania kolorów
+const generateLayerColor = (index: number): string => {
+  const colors = [
+    '#ff6b35', '#4ecdc4', '#45b7d1', '#96ceb4', 
+    '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'
+  ];
+  return colors[index % colors.length];
+};
+        </div>
+
+        <h2 id="popup-styling">6. 💬 Stylowanie popupów GetFeatureInfo</h2>
+        
+        <h3>Konfiguracja popupów</h3>
+        <p>Popupy są automatycznie stylowane w komponencie <code>FeatureInfoPopup.tsx</code>:</p>
+        
+        <div class="code-block">
+// Stylowanie nagłówka popup
+const headerStyle = {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#495057',
+  marginBottom: '8px',
+  borderBottom: '1px solid #dee2e6',
+  paddingBottom: '4px'
+};
+
+// Stylowanie atrybutów
+const attributeStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 2fr',
+  gap: '8px',
+  fontSize: '13px',
+  alignItems: 'start'
+};
+        </div>
+
+        <h3>Tłumaczenia atrybutów</h3>
+        <div class="code-block">
+const translations: { [key: string]: string } = {
+  'id': 'ID',
+  'name': 'Nazwa',
+  'area': 'Powierzchnia',
+  'length': 'Długość',
+  'type': 'Typ',
+  'status': 'Status',
+  'owner': 'Właściciel',
+  'address': 'Adres'
+};
+        </div>
+
+        <h2 id="controls">7. 🎛️ Kontrolki mapy</h2>
+        
+        <h3>LayerControl - kontrolka warstw</h3>
+        <ul>
+            <li><strong>Pozycja:</strong> Lewy górny róg (przesuwalna)</li>
+            <li><strong>Grupowanie:</strong> Warstwy lokalne / Warstwy WMS</li>
+            <li><strong>Funkcje:</strong> Włączanie/wyłączanie, wskaźniki ładowania</li>
+        </ul>
+
+        <h3>BasemapControl - kontrolka map podkładowych</h3>
+        <ul>
+            <li><strong>Pozycja:</strong> Lewy górny róg, poniżej LayerControl</li>
+            <li><strong>Funkcje:</strong> Przełączanie między mapami podkładowymi</li>
+            <li><strong>Tryby:</strong> Zwinięta/rozwinięta</li>
+        </ul>
+
+        <h2 id="examples">8. 📝 Przykłady konfiguracji</h2>
+        
+        <h3>Przykład 1: Dodanie nowej warstwy GeoJSON</h3>
+        <div class="code-block">
+// W pliku useMapLayers.ts
+const NEW_LAYER: LayerConfig = {
+  name: 'Drogi wojewódzkie',
+  apiName: 'roads_voivodeship',
+  color: '#ff9500',
+  type: 'geojson'
+};
+
+// Dodaj do tablicy DEFAULT_LAYERS
+const DEFAULT_LAYERS: LayerConfig[] = [
+  // ... istniejące warstwy
+  NEW_LAYER
+];
+        </div>
+
+        <h3>Przykład 2: Konfiguracja warstwy WMS z GUGIK</h3>
+        <div class="code-block">
+const GUGIK_WMS: LayerConfig = {
+  name: 'Ortofotomapa',
+  apiName: 'wms_ortofoto',
+  color: '#transparent',
+  type: 'wms',
+  wmsConfig: {
+    url: 'https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution',
+    layers: 'Raster',
+    format: 'image/jpeg',
+    transparent: false,
+    opacity: 0.8
+  }
+};
+        </div>
+
+        <h3>Przykład 3: Stylowanie zaawansowane</h3>
+        <div class="code-block">
+// W pliku mapStyles.ts
+export const getPathStyle = (layerName: string): PathOptions => {
+  switch(layerName) {
+    case 'Drogi główne':
+      return {
+        color: '#e74c3c',
+        weight: 4,
+        opacity: 0.9,
+        dashArray: '10, 5'
+      };
+    case 'Rzeki':
+      return {
+        color: '#3498db',
+        weight: 3,
+        opacity: 0.8,
+        lineCap: 'round'
+      };
+    default:
+      return defaultStyle;
+  }
+};
+        </div>
+
+        <div class="success">
+            <h3>🚀 Szybki start</h3>
+            <ol>
+                <li>Otwórz plik <code>frontend/src/hooks/useMapLayers.ts</code></li>
+                <li>Znajdź sekcję <code>DEFAULT_LAYERS</code> lub <code>WMS_LAYERS</code></li>
+                <li>Dodaj nową konfigurację warstwy</li>
+                <li>Zapisz plik i przeładuj aplikację</li>
+                <li>Nowa warstwa pojawi się w kontrolce warstw</li>
+            </ol>
+        </div>
+
+        <div class="info">
+            <h3>📚 Dodatkowe zasoby</h3>
+            <ul>
+                <li><a href="https://leafletjs.com/reference.html" target="_blank">Dokumentacja Leaflet</a></li>
+                <li><a href="https://react-leaflet.js.org/" target="_blank">React-Leaflet</a></li>
+                <li><a href="https://www.ogc.org/standards/wms" target="_blank">Standard WMS</a></li>
+                <li><a href="https://geojson.org/" target="_blank">Specyfikacja GeoJSON</a></li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+        <p style="text-align: center; color: #7f8c8d; font-size: 14px;">
+            <strong>Geo-Asystent AI</strong> | Dokumentacja wygenerowana automatycznie | 
+            Ostatnia aktualizacja: <span id="current-date"></span>
+        </p>
+    </div>
+
+    <script>
+        // Dodaj aktualną datę
+        document.getElementById('current-date').textContent = new Date().toLocaleDateString('pl-PL');
+        
+        // Smooth scrolling dla linków TOC
+        document.querySelectorAll('.toc a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

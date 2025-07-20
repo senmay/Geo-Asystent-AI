@@ -1,0 +1,7 @@
+Identyfikator działki:	306401_1.0004.AR_11.31/1
+Województwo:	wielkopolskie
+Powiat:	powiat Poznań
+Gmina:	Poznań
+Obręb:	ŚRÓDKA
+Numer działki:	31/1
+Pole pow. w ewidencji gruntów (ha):	0.1557

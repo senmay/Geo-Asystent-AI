@@ -15,12 +15,26 @@ export interface LayerState {
   color?: string;
   loading?: boolean;
   error?: string;
+  type?: 'geojson' | 'wms';
+  wmsConfig?: WMSConfig;
 }
 
 export interface LayerConfig {
   name: string;
   apiName: string;
   color: string;
+  type?: 'geojson' | 'wms';
+  wmsConfig?: WMSConfig;
+}
+
+export interface WMSConfig {
+  url: string;
+  layers: string;
+  format?: string;
+  transparent?: boolean;
+  opacity?: number;
+  maxZoom?: number;
+  minZoom?: number;
 }
 
 export interface UseMapLayersReturn {
@@ -37,16 +51,77 @@ export interface UseMapLayersReturn {
 }
 
 const DEFAULT_LAYERS: LayerConfig[] = [
-  { name: 'GPZ 110kV', apiName: 'gpz_POLSKA', color: '#ff0000' },
-  { name: 'Budynki przykładowe', apiName: 'buildings', color: '#3388ff' },
-  { name: 'Działki przykładowe', apiName: 'parcels', color: '#00ff00' },
-  { name: 'GPZ Wielkopolskie', apiName: 'GPZ_WIELKOPOLSKIE', color: '#ff00ff' },
-  { name: 'Województwa', apiName: 'wojewodztwa', color: '#800080' },
-  { name: 'Natura 2000', apiName: 'natura2000', color: '#008000' }
+  { name: 'GPZ 110kV', apiName: 'gpz_POLSKA', color: '#ff0000', type: 'geojson' },
+  { name: 'Budynki przykładowe', apiName: 'buildings', color: '#3388ff', type: 'geojson' },
+  { name: 'Działki przykładowe', apiName: 'parcels', color: '#00ff00', type: 'geojson' },
+  { name: 'GPZ Wielkopolskie', apiName: 'GPZ_WIELKOPOLSKIE', color: '#ff00ff', type: 'geojson' },
+  { name: 'Województwa', apiName: 'wojewodztwa', color: '#800080', type: 'geojson' },
+  { name: 'Natura 2000', apiName: 'natura2000', color: '#008000', type: 'geojson' }
 ];
 
+const WMS_LAYERS: LayerConfig[] = [
+  {
+    name: 'Działki ewidencyjne z powiatów',
+    apiName: 'wms_dzialki',
+    color: '#45b7d1',
+    type: 'wms',
+    wmsConfig: {
+      url: 'https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
+      layers: 'dzialki',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.9,
+      maxZoom: 20
+    }
+  },
+  {
+    name: 'Numery działek',
+    apiName: 'wms_numery',
+    color: '#45b7d1',
+    type: 'wms',
+    wmsConfig: {
+      url: 'https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
+      layers: 'numery_dzialek',
+      format: 'image/png',
+      transparent: true,
+      opacity: 1,
+      maxZoom: 20
+    }
+  },
+  {
+    name: 'Kontury klasyfikacyjne',
+    apiName: 'wms_kontury',
+    color: '#45b7d1',
+    type: 'wms',
+    wmsConfig: {
+      url: 'https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
+      layers: 'kontury',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.8,
+      maxZoom: 20
+    }
+  },
+  {
+    name: 'Użytki gruntowe',
+    apiName: 'wms_uzytki',
+    color: '#45b7d1',
+    type: 'wms',
+    wmsConfig: {
+      url: 'https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
+      layers: 'uzytki',
+      format: 'image/png',
+      transparent: true,
+      opacity: 0.9,
+      maxZoom: 20
+    }
+  }
+];
+
+const ALL_LAYERS = [...DEFAULT_LAYERS, ...WMS_LAYERS];
+
 export const useMapLayers = (
-  initialLayers: LayerConfig[] = DEFAULT_LAYERS
+  initialLayers: LayerConfig[] = ALL_LAYERS
 ): UseMapLayersReturn => {
   const [layers, setLayers] = useState<LayerState[]>([]);
   const [queryResult, setQueryResult] = useState<GeoJsonFeatureCollection | null>(null);
@@ -68,20 +143,27 @@ export const useMapLayers = (
             id: Date.now() + index,
             name: layerConfig.name,
             data: { type: 'FeatureCollection', features: [] },
-            visible: !['GPZ Wielkopolskie', 'Województwa', 'Natura 2000'].includes(layerConfig.name),
+            visible: !['GPZ Wielkopolskie', 'Województwa', 'Natura 2000', 'Działki ewidencyjne z powiatów', 'Numery działek', 'Kontury klasyfikacyjne', 'Użytki gruntowe'].includes(layerConfig.name),
             color: layerConfig.color,
-            loading: true,
+            loading: layerConfig.type === 'geojson',
+            type: layerConfig.type || 'geojson',
+            wmsConfig: layerConfig.wmsConfig,
           };
+
+          // Only load data for GeoJSON layers
+          if (layerConfig.type === 'wms') {
+            return { ...layerState, loading: false };
+          }
 
           try {
             const data = await gisService.getLayer(layerConfig.apiName, true);
             return { ...layerState, data, loading: false };
           } catch (error) {
             console.error(`Error loading layer ${layerConfig.name}:`, error);
-            return { 
-              ...layerState, 
-              loading: false, 
-              error: `Failed to load ${layerConfig.name}` 
+            return {
+              ...layerState,
+              loading: false,
+              error: `Failed to load ${layerConfig.name}`
             };
           }
         });
@@ -96,7 +178,7 @@ export const useMapLayers = (
     };
 
     loadInitialLayers();
-  }, [initialLayers, handleError, clearError]);
+  }, []); // Empty dependency array - only run once on mount
 
   const toggleLayer = useCallback((id: number) => {
     setLayers(prevLayers => {
@@ -133,8 +215,11 @@ export const useMapLayers = (
     if (!layer) return;
 
     // Find the original layer config to get the API name
-    const layerConfig = initialLayers.find(config => config.name === layer.name);
+    const layerConfig = ALL_LAYERS.find(config => config.name === layer.name);
     if (!layerConfig) return;
+
+    // Only refresh GeoJSON layers
+    if (layerConfig.type === 'wms') return;
 
     setLayers(prevLayers =>
       prevLayers.map(l =>
@@ -145,7 +230,7 @@ export const useMapLayers = (
     try {
       const gisService = getGISService();
       const data = await gisService.getLayer(layerConfig.apiName, true);
-      
+
       setLayers(prevLayers =>
         prevLayers.map(l =>
           l.id === id ? { ...l, data, loading: false } : l
@@ -155,15 +240,15 @@ export const useMapLayers = (
       console.error(`Error refreshing layer ${layer.name}:`, error);
       setLayers(prevLayers =>
         prevLayers.map(l =>
-          l.id === id ? { 
-            ...l, 
-            loading: false, 
-            error: `Failed to refresh ${layer.name}` 
+          l.id === id ? {
+            ...l,
+            loading: false,
+            error: `Failed to refresh ${layer.name}`
           } : l
         )
       );
     }
-  }, [layers, initialLayers]);
+  }, [layers]);
 
   const addLayer = useCallback(async (config: LayerConfig) => {
     const newLayer: LayerState = {
@@ -180,7 +265,7 @@ export const useMapLayers = (
     try {
       const gisService = getGISService();
       const data = await gisService.getLayer(config.apiName, true);
-      
+
       setLayers(prevLayers =>
         prevLayers.map(layer =>
           layer.id === newLayer.id ? { ...layer, data, loading: false } : layer
@@ -190,10 +275,10 @@ export const useMapLayers = (
       console.error(`Error adding layer ${config.name}:`, error);
       setLayers(prevLayers =>
         prevLayers.map(layer =>
-          layer.id === newLayer.id ? { 
-            ...layer, 
-            loading: false, 
-            error: `Failed to load ${config.name}` 
+          layer.id === newLayer.id ? {
+            ...layer,
+            loading: false,
+            error: `Failed to load ${config.name}`
           } : layer
         )
       );
