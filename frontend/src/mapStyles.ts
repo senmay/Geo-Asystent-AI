@@ -46,7 +46,6 @@ export const createStyledCircleMarker = (latlng: L.LatLng, layerName?: string): 
     return L.circleMarker(latlng, { ...style, radius: style.radius ?? 8 });
 };
 
-
 // --- Line and Polygon Styles ---
 // Defines the appearance of lines and polygons.
 

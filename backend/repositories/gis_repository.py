@@ -64,14 +64,41 @@ class GISRepository(BaseRepository):
                 description="Building footprints",
                 has_low_resolution=True
             ),
-            "gpz": LayerConfig(
-                name="gpz",
+            "gpz_POLSKA": LayerConfig(
+                name="gpz_POLSKA",
                 table_name="gpz_110kv",
                 geometry_column="geom",
                 id_column="id",
                 display_name="GPZ 110kV",
                 description="Electrical substations 110kV",
                 has_low_resolution=False
+            ),
+            "gpz_WIELKOPOLSKIE": LayerConfig(
+                name="GPZ_WIELKOPOLSKIE",
+                table_name="GPZ_WIELKOPOLSKIE",
+                geometry_column="geom",
+                id_column="id",
+                display_name="GPZ Wielkopolskie",
+                description="Electrical substations in Wielkopolska region",
+                has_low_resolution=False
+            ),
+            "wojewodztwa": LayerConfig(
+                name="wojewodztwa",
+                table_name="wojewodztwa",
+                geometry_column="geometry",
+                id_column="JPT_NAZWA_",
+                display_name="Województwa",
+                description="Voivodeship boundaries",
+                has_low_resolution=True
+            ),
+            "natura2000": LayerConfig(
+                name="natura2000",
+                table_name="natura2000",
+                geometry_column="geometry",
+                id_column="id",
+                display_name="Natura 2000",
+                description="Natura 2000 protected areas",
+                has_low_resolution=True
             )
         }
     
@@ -103,13 +130,22 @@ class GISRepository(BaseRepository):
         # Map common names to layer keys
         name_mapping = {
             "działki": "parcels",
+            "dzialki": "parcels",
+            "dzialka": "parcels",
+            "działka": "parcels",
             "parcels": "parcels",
             "parcel": "parcels",
             "budynki": "buildings", 
             "buildings": "buildings",
             "building": "buildings",
-            "gpz": "gpz",
-            "gpz_110kv": "gpz"
+            "gpz_wielkopolskie": "gpz_WIELKOPOLSKIE",
+            "gpz": "gpz_POLSKA",
+            "gpz_110kv": "gpz_POLSKA",
+            "gpz_polska": "gpz_POLSKA",
+            "wojewodztwa": "wojewodztwa",
+            "województwa": "wojewodztwa",
+            "natura2000": "natura2000",
+            "natura_2000": "natura2000"
         }
         
         layer_key = None

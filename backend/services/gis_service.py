@@ -227,7 +227,7 @@ class GISService:
         """
         layers_info = {}
         
-        for layer_name in ["parcels", "buildings", "gpz"]:
+        for layer_name in self.repository.layers.keys():
             try:
                 layers_info[layer_name] = self.get_layer_info(layer_name)
             except Exception as e:

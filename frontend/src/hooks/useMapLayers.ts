@@ -37,9 +37,12 @@ export interface UseMapLayersReturn {
 }
 
 const DEFAULT_LAYERS: LayerConfig[] = [
-  { name: 'GPZ 110kV', apiName: 'gpz_110kv', color: '#ff0000' },
+  { name: 'GPZ 110kV', apiName: 'gpz_POLSKA', color: '#ff0000' },
   { name: 'Budynki', apiName: 'buildings', color: '#3388ff' },
   { name: 'Działki', apiName: 'parcels', color: '#00ff00' },
+  { name: 'GPZ Wielkopolskie', apiName: 'GPZ_WIELKOPOLSKIE', color: '#ff00ff' },
+  { name: 'Województwa', apiName: 'wojewodztwa', color: '#800080' },
+  { name: 'Natura 2000', apiName: 'natura2000', color: '#008000' }
 ];
 
 export const useMapLayers = (
@@ -65,7 +68,7 @@ export const useMapLayers = (
             id: Date.now() + index,
             name: layerConfig.name,
             data: { type: 'FeatureCollection', features: [] },
-            visible: true,
+            visible: !['GPZ Wielkopolskie', 'Województwa', 'Natura 2000'].includes(layerConfig.name),
             color: layerConfig.color,
             loading: true,
           };
@@ -96,11 +99,33 @@ export const useMapLayers = (
   }, [initialLayers, handleError, clearError]);
 
   const toggleLayer = useCallback((id: number) => {
-    setLayers(prevLayers =>
-      prevLayers.map(layer =>
-        layer.id === id ? { ...layer, visible: !layer.visible } : layer
-      )
-    );
+    setLayers(prevLayers => {
+      const toggledLayer = prevLayers.find(l => l.id === id);
+      if (!toggledLayer) return prevLayers;
+
+      const isTogglingOn = !toggledLayer.visible;
+      const toggledName = toggledLayer.name;
+
+      return prevLayers.map(layer => {
+        // The layer being toggled
+        if (layer.id === id) {
+          return { ...layer, visible: !layer.visible };
+        }
+
+        // If we are turning a GPZ layer on, turn the other one off.
+        if (isTogglingOn) {
+          if (toggledName === 'GPZ 110kV' && layer.name === 'GPZ Wielkopolskie') {
+            return { ...layer, visible: false };
+          }
+          if (toggledName === 'GPZ Wielkopolskie' && layer.name === 'GPZ 110kV') {
+            return { ...layer, visible: false };
+          }
+        }
+
+        // Otherwise, return the layer as is.
+        return layer;
+      });
+    });
   }, []);
 
   const refreshLayer = useCallback(async (id: number) => {

@@ -35,7 +35,7 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
         base_layer_name = "buildings"
         id_column = "ID_BUDYNKU"
     elif "gpz" in normalized_input:
-        base_layer_name = "gpz_110kv"
+        base_layer_name = normalized_input
         id_column = "id"
     
     if not base_layer_name:
