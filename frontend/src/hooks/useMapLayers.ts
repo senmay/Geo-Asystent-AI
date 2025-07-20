@@ -38,8 +38,8 @@ export interface UseMapLayersReturn {
 
 const DEFAULT_LAYERS: LayerConfig[] = [
   { name: 'GPZ 110kV', apiName: 'gpz_POLSKA', color: '#ff0000' },
-  { name: 'Budynki', apiName: 'buildings', color: '#3388ff' },
-  { name: 'Działki', apiName: 'parcels', color: '#00ff00' },
+  { name: 'Budynki przykładowe', apiName: 'buildings', color: '#3388ff' },
+  { name: 'Działki przykładowe', apiName: 'parcels', color: '#00ff00' },
   { name: 'GPZ Wielkopolskie', apiName: 'GPZ_WIELKOPOLSKIE', color: '#ff00ff' },
   { name: 'Województwa', apiName: 'wojewodztwa', color: '#800080' },
   { name: 'Natura 2000', apiName: 'natura2000', color: '#008000' }

@@ -51,7 +51,7 @@ class GISRepository(BaseRepository):
                 table_name="parcels",
                 geometry_column="geometry",
                 id_column="ID_DZIALKI",
-                display_name="Działki",
+                display_name="Działki_przykładowe",
                 description="Land parcels with ownership information",
                 has_low_resolution=True
             ),
@@ -60,7 +60,7 @@ class GISRepository(BaseRepository):
                 table_name="buildings",
                 geometry_column="geometry",
                 id_column="ID_BUDYNKU",
-                display_name="Budynki",
+                display_name="Budynki_przykładowe",
                 description="Building footprints",
                 has_low_resolution=True
             ),
@@ -84,21 +84,21 @@ class GISRepository(BaseRepository):
             ),
             "wojewodztwa": LayerConfig(
                 name="wojewodztwa",
-                table_name="wojewodztwa",
-                geometry_column="geometry",
+                table_name="Wojewodztwa",
+                geometry_column="geom",
                 id_column="JPT_NAZWA_",
                 display_name="Województwa",
                 description="Voivodeship boundaries",
-                has_low_resolution=True
+                has_low_resolution=False
             ),
             "natura2000": LayerConfig(
                 name="natura2000",
-                table_name="natura2000",
-                geometry_column="geometry",
+                table_name="natura 2000",
+                geometry_column="geom",
                 id_column="id",
                 display_name="Natura 2000",
                 description="Natura 2000 protected areas",
-                has_low_resolution=True
+                has_low_resolution=False
             )
         }
     
@@ -130,9 +130,13 @@ class GISRepository(BaseRepository):
         # Map common names to layer keys
         name_mapping = {
             "działki": "parcels",
-            "dzialki": "parcels",
+            "dzialki": "parcelsw",
             "dzialka": "parcels",
             "działka": "parcels",
+            "działki_przykładowe": "parcels",
+            "dzialki_przykladowe": "parcels",
+            "przykladowe_dzialki": "parcels",
+            "przykladowe_dzialka": "parcels",
             "parcels": "parcels",
             "parcel": "parcels",
             "budynki": "buildings", 
