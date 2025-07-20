@@ -36,7 +36,30 @@ const GeoJsonLayer = ({ data, layerName, fitBounds = true }: GeoJsonLayerProps) 
 
   const onEachFeature = (feature: any, layer: L.Layer) => {
     if (layerName === 'Województwa' && feature.properties && feature.properties.JPT_NAZWA_) {
-      layer.bindTooltip(feature.properties.JPT_NAZWA_, { permanent: true, direction: 'center', className: 'wojewodztwo-label' });
+      const tooltip = layer.bindTooltip(feature.properties.JPT_NAZWA_, { 
+        permanent: true, 
+        direction: 'center', 
+        className: 'wojewodztwo-label' 
+      });
+      
+      // Hide labels when zoom is greater than 8
+      const updateLabelVisibility = () => {
+        const currentZoom = map.getZoom();
+        const tooltipElement = tooltip.getTooltip();
+        if (tooltipElement) {
+          if (currentZoom > 8) {
+            tooltipElement.getElement()?.style.setProperty('display', 'none');
+          } else {
+            tooltipElement.getElement()?.style.setProperty('display', 'block');
+          }
+        }
+      };
+      
+      // Update visibility on zoom change
+      map.on('zoomend', updateLabelVisibility);
+      
+      // Set initial visibility
+      setTimeout(updateLabelVisibility, 100);
     }
   };
 

@@ -192,9 +192,9 @@ body, html, #root {
 
 .wojewodztwo-label {
   font-family: 'Courier New', Courier, monospace;
-  font-size: 30px;
+  font-size: 20px;
   border: none;
-  color: white;  
+  color: black;  
   font-size: 12px;
   font-weight: bold;
   text-align: center;

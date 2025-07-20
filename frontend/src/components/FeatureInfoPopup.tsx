@@ -71,52 +71,43 @@ const FeatureInfoPopup: React.FC<FeatureInfoPopupProps> = ({
         return null;
       }
 
-      // Try to extract meaningful data from common WMS response formats
       const features: any[] = [];
 
-      // Look for common WMS feature info patterns
-      const featureElements = xmlDoc.querySelectorAll('Feature, gml\\:featureMember, *[id*="feature"], *[class*="feature"]');
-
-      if (featureElements.length > 0) {
-        featureElements.forEach((feature, index) => {
+      // Look for gml:featureMember elements (GUGIK format)
+      const featureMembers = xmlDoc.querySelectorAll('gml\\:featureMember, featureMember');
+      
+      if (featureMembers.length > 0) {
+        featureMembers.forEach((featureMember) => {
           const properties: any = {};
-
-          // Extract attributes from the feature element
-          Array.from(feature.attributes).forEach(attr => {
-            if (attr.name !== 'id' && attr.name !== 'class') {
-              properties[attr.name] = attr.value;
+          
+          // Look for Attribute elements with Name attribute
+          const attributes = featureMember.querySelectorAll('Attribute[Name]');
+          
+          // Define the attributes we want to extract
+          const wantedAttributes = [
+            'Identyfikator działki',
+            'Województwo', 
+            'Powiat',
+            'Gmina',
+            'Obręb',
+            'Numer działki',
+            'Pole pow. w ewidencji gruntów (ha)'
+          ];
+          
+          attributes.forEach((attr) => {
+            const name = attr.getAttribute('Name');
+            const value = attr.textContent?.trim();
+            
+            // Only include wanted attributes
+            if (name && value && wantedAttributes.includes(name)) {
+              properties[name] = value;
             }
           });
-
-          // Extract text content from child elements
-          Array.from(feature.children).forEach(child => {
-            const tagName = child.tagName.replace(/^.*:/, ''); // Remove namespace prefix
-            const textContent = child.textContent?.trim();
-            if (textContent && textContent !== '') {
-              properties[tagName] = textContent;
-            }
-          });
-
-          // If no structured data found, use the text content
-          if (Object.keys(properties).length === 0) {
-            const textContent = feature.textContent?.trim();
-            if (textContent) {
-              properties['Informacje'] = textContent;
-            }
-          }
 
           if (Object.keys(properties).length > 0) {
             features.push({ properties });
           }
         });
-      }
-
-      // If no features found, try to extract any meaningful text
-      if (features.length === 0) {
-        const bodyText = xmlDoc.body?.textContent?.trim() || xmlDoc.documentElement?.textContent?.trim();
-        if (bodyText && bodyText !== '') {
-          features.push({ properties: { 'Informacje': bodyText } });
-        }
       }
 
       return features.length > 0 ? { features } : null;
