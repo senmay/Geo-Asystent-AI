@@ -57,6 +57,10 @@ async def process_chat(
         elif intent == 'find_parcels_above_area':
             geojson_data = gis_service.find_parcels_above_area(route_details['min_area'])
             return ChatResponse(type="geojson", data=geojson_data, intent=intent)
+
+        elif intent =='find_parcels_without_building':
+            geojson_data = gis_service.find_parcels_without_buildings()
+            return ChatResponse(type="geojson", data=geojson_data, intent=intent)            
         
         elif intent == 'find_parcels_near_gpz':
             geojson_data = gis_service.find_parcels_near_gpz(route_details['radius_meters'])

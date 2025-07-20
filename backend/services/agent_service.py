@@ -40,6 +40,9 @@ def get_gis_service() -> GISService:
         _gis_service = GISService(engine)
     return _gis_service
 
+
+# PDF export is now handled on the frontend
+
 def process_query(query: str) -> dict:
     """
     Processes the user query by first routing it to the correct logic.
@@ -60,13 +63,9 @@ def process_query(query: str) -> dict:
         # Handle different intents using separated services
         try:
             gis_service = get_gis_service()
+            geojson_data = None
             
-            if intent == 'get_gis_data':
-                if not route_details.get('layer_name'):
-                    return {"type": "text", "data": "Nie sprecyzowałeś, którą warstwę wyświetlić. Spróbuj \"pokaż działki\" lub \"pokaż budynki\".", "intent": intent}
-                geojson_data = gis_service.get_layer_as_geojson(route_details['layer_name'])
-            
-            elif intent == 'find_largest_parcel':
+            if intent == 'find_largest_parcel':
                 geojson_data = gis_service.find_largest_parcel()
 
             elif intent == 'find_n_largest_parcels':
@@ -77,6 +76,34 @@ def process_query(query: str) -> dict:
 
             elif intent == 'find_parcels_near_gpz':
                 geojson_data = gis_service.find_parcels_near_gpz(route_details['radius_meters'])
+
+            elif intent == 'find_parcels_without_buildings':
+                logger.info("Executing find_parcels_without_buildings function")
+                try:
+                    geojson_data = gis_service.find_parcels_without_buildings()
+                    logger.info(f"Successfully got GeoJSON data: {len(geojson_data) if geojson_data else 0} characters")
+                except Exception as e:
+                    logger.error(f"Error in find_parcels_without_buildings: {e}", exc_info=True)
+                    raise
+              
+
+            elif intent == 'export_to_pdf':
+                # For PDF export, we need to handle it differently as it doesn't return GeoJSON
+                try:
+                    # This would typically use the last query result stored in session/context
+                    # For now, return a message indicating PDF export functionality
+                    return {
+                        "type": "text", 
+                        "data": "Funkcja eksportu do PDF została wywołana. W pełnej implementacji wyeksportowałaby ostatnie wyniki zapytania do pliku PDF.",
+                        "intent": intent
+                    }
+                except Exception as e:
+                    logger.error(f"PDF export failed: {e}")
+                    return {
+                        "type": "text",
+                        "data": "Wystąpił błąd podczas eksportu do PDF. Spróbuj ponownie później.",
+                        "intent": intent
+                    }
 
             else: # Intent is 'chat' or fallback
                 try:

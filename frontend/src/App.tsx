@@ -4,7 +4,7 @@ import GeoJsonLayer from './GeoJsonLayer';
 import WMSLayer from './WMSLayer';
 
 import Chat from './Chat';
-import { ErrorBanner, LoadingOverlay, FeatureInfoPopup, LayerPane, ZoomControl } from './components';
+import { ErrorBanner, LoadingOverlay, FeatureInfoPopup, LayerPane, ZoomControl, PDFExport } from './components';
 import { useMapLayers } from './hooks';
 import type { AppProps } from './types/components';
 import type { BasemapOption } from './components/BasemapControl';
@@ -198,7 +198,33 @@ const App: React.FC<AppProps> = ({ className, style }) => {
       
       <div className="chat-container" style={{ width: chatWidth }}>
         <div className="resizer" onMouseDown={handleMouseDown}></div>
-        <Chat setQueryGeojson={setQueryResult} />
+        <div style={{ 
+          position: 'relative',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            zIndex: 1000
+          }}>
+            <PDFExport 
+              data={queryResult}
+              reportTitle="Wyniki zapytania GIS"
+              onExportStart={() => console.log('Rozpoczęto eksport PDF...')}
+              onExportComplete={(success, message) => {
+                if (success) {
+                  console.log('✅ Eksport PDF zakończony pomyślnie:', message);
+                } else {
+                  console.error('❌ Błąd eksportu PDF:', message);
+                }
+              }}
+            />
+          </div>
+          <Chat setQueryGeojson={setQueryResult} />
+        </div>
       </div>
     </div>
   );

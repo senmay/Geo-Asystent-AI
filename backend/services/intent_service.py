@@ -22,10 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 # --- Pydantic Models for each Intent ---
-class GetGisData(BaseModel):
-    """Użytkownik chce zobaczyć całą warstwę GIS na mapie."""
-    intent: Literal['get_gis_data'] = "get_gis_data"
-    layer_name: str = Field(description="Nazwa warstwy do pobrania, np. 'działki' lub 'budynki'.")
+# Removed GetGisData - no longer supported
 
 
 class FindLargestParcel(BaseModel):
@@ -51,6 +48,16 @@ class FindParcelsNearGpz(BaseModel):
     radius_meters: int = Field(description="Promień w metrach od GPZ.")
 
 
+class FindParcelsWithoutBuildings(BaseModel):
+    """Użytkownik chce znaleźć działki bez budynków."""
+    intent: Literal['find_parcels_without_buildings'] = "find_parcels_without_buildings"
+
+
+class ExportToPdf(BaseModel):
+    """Użytkownik chce wyeksportować wyniki do pliku PDF."""
+    intent: Literal['export_to_pdf'] = "export_to_pdf"
+
+
 class Chat(BaseModel):
     """Użytkownik prowadzi luźną rozmowę, zadaje ogólne pytanie lub jego intencja jest niejasna."""
     intent: Literal['chat'] = "chat"
@@ -58,7 +65,7 @@ class Chat(BaseModel):
 
 # --- Union of all possible routes ---
 class Route(BaseModel):
-    route: Union[GetGisData, FindLargestParcel, FindNLargestParcels, FindParcelsAboveArea, FindParcelsNearGpz, Chat]
+    route: Union[FindLargestParcel, FindNLargestParcels, FindParcelsAboveArea, FindParcelsNearGpz, FindParcelsWithoutBuildings, ExportToPdf, Chat]
 
 
 class IntentClassificationService:
@@ -209,11 +216,12 @@ Schema: {format_instructions}"""
             Dictionary mapping intent names to descriptions
         """
         return {
-            "get_gis_data": "Wyświetlenie warstwy GIS na mapie",
             "find_largest_parcel": "Znalezienie największej działki",
             "find_n_largest_parcels": "Znalezienie N największych działek",
             "find_parcels_above_area": "Znalezienie działek powyżej określonej powierzchni",
             "find_parcels_near_gpz": "Znalezienie działek w pobliżu GPZ",
+            "find_parcels_without_buildings": "Znalezienie działek bez budynków",
+            "export_to_pdf": "Eksport wyników do pliku PDF",
             "chat": "Ogólna rozmowa lub pytania pomocnicze"
         }
     
@@ -246,9 +254,6 @@ Schema: {format_instructions}"""
             if not radius or radius <= 0:
                 raise ValueError("Parameter 'radius_meters' must be positive")
         
-        elif intent == "get_gis_data":
-            layer_name = parameters.get("layer_name")
-            if not layer_name or not layer_name.strip():
-                raise ValueError("Parameter 'layer_name' is required")
+        # Removed get_gis_data validation - no longer supported
         
         return True

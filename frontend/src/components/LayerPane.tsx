@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { LayerState } from '../hooks/useMapLayers';
 import type { BasemapOption } from './BasemapControl';
+import PDFExport from './PDFExport';
+import type { GeoJsonFeatureCollection } from '../services/api/types';
 
 export interface LayerPaneProps {
   layers: LayerState[];

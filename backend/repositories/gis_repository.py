@@ -420,3 +420,59 @@ class GISRepository(BaseRepository):
         except Exception as e:
             self.logger.error(f"Failed to get bounds for layer {layer_name}: {e}")
             return None
+    
+    def find_parcels_without_buildings(self) -> gpd.GeoDataFrame:
+        """
+        Find parcels that do not contain any buildings within their boundaries.
+        
+        Returns:
+            GeoDataFrame with parcels without buildings
+            
+        Raises:
+            SpatialQueryError: If spatial query fails
+        """
+        parcels_config = self.get_layer_config("parcels")
+        buildings_config = self.get_layer_config("buildings")
+        
+        parcels_table = f"{parcels_config.table_name}_low"
+        buildings_table = f"{buildings_config.table_name}_low"
+        
+        sql = f"""
+            SELECT p.*, ST_Area(p.geometry) as area_sqm
+            FROM "{parcels_table}" p
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM "{buildings_table}" b
+                WHERE ST_Intersects(p.geometry, b.geometry)
+            );
+        """
+        
+        try:
+            with log_database_operation(
+                "find_parcels_without_buildings",
+                table=parcels_table,
+                buildings_table=buildings_table
+            ):
+                gdf = gpd.read_postgis(sql, self.db_engine, geom_col='geometry')
+            
+            if gdf.empty:
+                self.logger.info("No parcels without buildings found")
+                # Return empty GeoDataFrame with proper structure
+                return gpd.GeoDataFrame(columns=['geometry', 'message', 'area_sqm'])
+            
+            self.logger.info(f"Found {len(gdf)} parcels without buildings")
+            
+            # Add metadata
+            gdf['loaded_layer'] = parcels_table
+            
+            return gdf
+            
+        except Exception as e:
+            raise SpatialQueryError(
+                query_type="parcels_without_buildings_search",
+                parameters={
+                    "parcels_table": parcels_table,
+                    "buildings_table": buildings_table
+                },
+                original_error=e
+            )

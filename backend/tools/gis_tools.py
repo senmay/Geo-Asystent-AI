@@ -295,3 +295,193 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
         # Re-raise the exception to be handled by the agent/caller,
         # which should result in a proper JSON error response.
         raise
+
+
+@tool
+def find_parcels_without_buildings(db_engine: Engine) -> str:
+    """
+    Finds all parcels that do not contain any buildings within their boundaries.
+    Uses spatial intersection to identify parcels without buildings.
+    Returns parcels as GeoJSON with their ID and area information.
+    """
+    logger.info("Finding parcels without buildings")
+    
+    parcels_table = "parcels_low"
+    buildings_table = "buildings_low"
+    
+    # SQL query to find parcels that don't intersect with any buildings
+    sql = f"""
+        SELECT p.*, ST_Area(p.geometry) as area_sqm
+        FROM "{parcels_table}" p
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM "{buildings_table}" b
+            WHERE ST_Intersects(p.geometry, b.geometry)
+        );
+    """
+    
+    try:
+        with log_database_operation("find_parcels_without_buildings", table=parcels_table):
+            gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
+            
+        if gdf.empty:
+            logger.info("No parcels without buildings found, returning empty GeoJSON.")
+            return '{"type": "FeatureCollection", "features": []}'
+            
+        logger.info(f"Found {len(gdf)} parcels without buildings")
+        
+        try:
+            gdf_reprojected = gdf.to_crs(epsg=4326)
+            
+            messages = []
+            for index, row in gdf.iterrows():
+                parcel_id = row.get('ID_DZIALKI', 'Brak ID')
+                area_sqm = row['area_sqm']
+                area_ha = area_sqm / 10000
+                messages.append(f"Niezabudowana działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+            
+            gdf_reprojected['message'] = messages
+            
+            return gdf_reprojected.to_json()
+            
+        except Exception as e:
+            raise GISDataProcessingError(
+                operation="coordinate transformation and GeoJSON conversion for parcels without buildings",
+                original_error=e
+            )
+            
+    except (GISDataProcessingError, DatabaseConnectionError):
+        raise
+    except Exception as e:
+        raise SpatialQueryError(
+            operation="finding parcels without buildings",
+            original_error=e
+        )
+
+
+@tool
+def export_results_to_pdf(geojson_data: str, report_title: str = "Raport GIS") -> str:
+    """
+    Exports GIS query results to a PDF file.
+    Creates a PDF report with a list of parcels, their IDs, and areas.
+    Returns the path to the generated PDF file.
+    """
+    import json
+    import tempfile
+    from datetime import datetime
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    
+    logger.info(f"Exporting results to PDF: {report_title}")
+    
+    try:
+        # Parse GeoJSON data
+        geojson = json.loads(geojson_data)
+        features = geojson.get('features', [])
+        
+        if not features:
+            logger.warning("No features found in GeoJSON data for PDF export")
+            return "Brak danych do eksportu - nie znaleziono żadnych obiektów."
+        
+        # Create temporary PDF file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        pdf_path = temp_file.name
+        temp_file.close()
+        
+        # Create PDF document
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=1  # Center alignment
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=20
+        )
+        
+        # Build PDF content
+        story = []
+        
+        # Title
+        story.append(Paragraph(report_title, title_style))
+        story.append(Paragraph(f"Data wygenerowania: {datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Summary
+        story.append(Paragraph(f"Podsumowanie", subtitle_style))
+        story.append(Paragraph(f"Liczba znalezionych obiektów: {len(features)}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Table data
+        table_data = [['Lp.', 'ID Działki', 'Powierzchnia (ha)', 'Informacje']]
+        
+        for idx, feature in enumerate(features, 1):
+            properties = feature.get('properties', {})
+            
+            # Extract parcel ID
+            parcel_id = properties.get('ID_DZIALKI', properties.get('id', 'Brak ID'))
+            
+            # Extract area
+            area_sqm = properties.get('area_sqm', 0)
+            area_ha = area_sqm / 10000 if area_sqm else 0
+            area_str = f"{area_ha:.4f}" if area_ha > 0 else "Brak danych"
+            
+            # Extract message or create default
+            message = properties.get('message', 'Działka')
+            if isinstance(message, list) and message:
+                message = message[0] if len(message) > 0 else 'Działka'
+            
+            table_data.append([
+                str(idx),
+                str(parcel_id),
+                area_str,
+                str(message)[:50] + "..." if len(str(message)) > 50 else str(message)
+            ])
+        
+        # Create table
+        table = Table(table_data, colWidths=[1*cm, 3*cm, 2.5*cm, 8*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        
+        story.append(Paragraph("Lista działek", subtitle_style))
+        story.append(table)
+        
+        # Add footer
+        story.append(Spacer(1, 30))
+        story.append(Paragraph("Raport wygenerowany przez Geo-Asystent AI", styles['Normal']))
+        
+        # Build PDF
+        doc.build(story)
+        
+        logger.info(f"PDF report generated successfully: {pdf_path}")
+        return f"Raport PDF został wygenerowany pomyślnie. Zawiera {len(features)} obiektów. Plik zapisany jako: {pdf_path}"
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid GeoJSON data for PDF export: {e}")
+        return "Błąd: Nieprawidłowe dane GeoJSON do eksportu."
+    except Exception as e:
+        logger.error(f"Error generating PDF report: {e}")
+        return f"Błąd podczas generowania raportu PDF: {str(e)}"

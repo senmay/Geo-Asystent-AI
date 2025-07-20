@@ -11,3 +11,4 @@ export { default as FeatureInfoPopup } from './FeatureInfoPopup';
 export { default as BasemapControl } from './BasemapControl';
 export { default as LayerPane } from './LayerPane';
 export { default as ZoomControl } from './ZoomControl';
+export { default as PDFExport } from './PDFExport';

@@ -187,6 +187,47 @@ class GISService:
             self.logger.error(f"Failed to find parcels near GPZ: {e}")
             raise
     
+    @log_gis_operation("parcels_without_buildings_search")
+    def find_parcels_without_buildings(self) -> str:
+        """
+        Find parcels that do not contain any buildings within their boundaries.
+        
+        Returns:
+            GeoJSON string with parcels without buildings
+        """
+        self.logger.info("Finding parcels without buildings")
+        
+        try:
+            gdf = self.repository.find_parcels_without_buildings()
+            
+            if gdf.empty:
+                self.logger.info("No parcels without buildings found")
+                # Return empty FeatureCollection
+                return '{"type": "FeatureCollection", "features": []}'
+            
+            # Reproject to WGS84
+            gdf_reprojected = gdf.to_crs(epsg=4326)
+            
+            # Add descriptive messages
+            messages = []
+            for _, row in gdf_reprojected.iterrows():
+                parcel_id = row.get('ID_DZIALKI', 'Brak ID')
+                area_sqm = row.get('area_sqm', 0)
+                area_ha = area_sqm / 10000 if area_sqm else 0
+                messages.append(f"Niezabudowana działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+            
+            gdf_reprojected['message'] = messages
+            
+            self.logger.info(f"Found {len(gdf_reprojected)} parcels without buildings")
+            return gdf_reprojected.to_json()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to find parcels without buildings: {e}")
+            raise SpatialQueryError(
+                operation="finding parcels without buildings",
+                original_error=e
+            )
+    
     def get_layer_info(self, layer_name: str) -> Dict[str, Any]:
         """
         Get information about a layer.
