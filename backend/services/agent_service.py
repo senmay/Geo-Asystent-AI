@@ -85,7 +85,6 @@ def process_query(query: str) -> dict:
                 except Exception as e:
                     logger.error(f"Error in find_parcels_without_buildings: {e}", exc_info=True)
                     raise
-              
 
             elif intent == 'export_to_pdf':
                 # For PDF export, we need to handle it differently as it doesn't return GeoJSON
