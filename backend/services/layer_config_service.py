@@ -153,45 +153,45 @@ class LayerConfigService:
                 
                 self._cache[row.layer_name] = config
     
-    def _load_fallback_config(self):
-        """Load fallback configuration if database is not available."""
-        self.logger.warning("Using fallback layer configuration")
+    # def _load_fallback_config(self):
+    #     """Load fallback configuration if database is not available."""
+    #     self.logger.warning("Using fallback layer configuration")
         
-        fallback_configs = [
-            LayerConfig(
-                layer_name='parcels',
-                display_name='Działki przykładowe',
-                table_name='parcels',
-                geometry_column='geometry',
-                id_column='ID_DZIALKI',
-                description='Działki ewidencyjne',
-                default_visible=True,
-                cluster_points=False
-            ),
-            LayerConfig(
-                layer_name='buildings',
-                display_name='Budynki przykładowe',
-                table_name='buildings',
-                geometry_column='geometry',
-                id_column='ID_BUDYNKU',
-                description='Kontury budynków',
-                default_visible=True,
-                cluster_points=False
-            ),
-            LayerConfig(
-                layer_name='gpz_POLSKA',
-                display_name='GPZ 110kV',
-                table_name='gpz_110kv',
-                geometry_column='geom',
-                id_column='id',
-                description='Stacje elektroenergetyczne',
-                default_visible=True,
-                cluster_points=True
-            )
-        ]
+    #     fallback_configs = [
+    #         LayerConfig(
+    #             layer_name='parcels',
+    #             display_name='Działki przykładowe',
+    #             table_name='parcels',
+    #             geometry_column='geometry',
+    #             id_column='ID_DZIALKI',
+    #             description='Działki ewidencyjne',
+    #             default_visible=True,
+    #             cluster_points=False
+    #         ),
+    #         LayerConfig(
+    #             layer_name='buildings',
+    #             display_name='Budynki przykładowe',
+    #             table_name='buildings',
+    #             geometry_column='geometry',
+    #             id_column='ID_BUDYNKU',
+    #             description='Kontury budynków',
+    #             default_visible=True,
+    #             cluster_points=False
+    #         ),
+    #         LayerConfig(
+    #             layer_name='gpz_POLSKA',
+    #             display_name='GPZ 110kV',
+    #             table_name='gpz_110kv',
+    #             geometry_column='geom',
+    #             id_column='id',
+    #             description='Stacje elektroenergetyczne',
+    #             default_visible=True,
+    #             cluster_points=True
+    #         )
+    #     ]
         
-        for config in fallback_configs:
-            self._cache[config.layer_name] = config
+    #     for config in fallback_configs:
+    #         self._cache[config.layer_name] = config
     
     def add_layer_config(self, config: LayerConfig) -> bool:
         """Add or update layer configuration in database."""

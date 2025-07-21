@@ -13,6 +13,38 @@ from exceptions import (
 )
 from utils.db_logger import log_database_operation
 
+
+def limit_results_for_display(gdf, max_display=5, item_type="działka"):
+    """
+    Limit results for chat display and add summary message.
+    
+    Args:
+        gdf: GeoDataFrame with results
+        max_display: Maximum number of items to show in chat
+        item_type: Type of item (działka, budynek, etc.)
+    
+    Returns:
+        Tuple of (limited_gdf, summary_message)
+    """
+    total_count = len(gdf)
+    
+    if total_count <= max_display:
+        return gdf, None
+    
+    # Limit to first max_display results
+    limited_gdf = gdf.head(max_display).copy()
+    
+    # Create summary message
+    remaining = total_count - max_display
+    if item_type == "działka":
+        summary = f"Wyświetlono {max_display} z {total_count} działek. Pozostałe {remaining} działek dostępne w PDF."
+    elif item_type == "budynek":
+        summary = f"Wyświetlono {max_display} z {total_count} budynków. Pozostałe {remaining} budynków dostępne w PDF."
+    else:
+        summary = f"Wyświetlono {max_display} z {total_count} wyników. Pozostałe {remaining} wyników dostępne w PDF."
+    
+    return limited_gdf, summary
+
 logger = logging.getLogger(__name__)
 
 @tool
@@ -193,16 +225,23 @@ def find_n_largest_parcels(n: int, db_engine: Engine) -> str:
         
         gdf_reprojected = gdf.to_crs(epsg=4326)
         
+        # Limit results for display
+        limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+        
         messages = []
-        for index, row in gdf.iterrows():
+        for index, row in limited_gdf.iterrows():
             parcel_id = row.get('ID_DZIALKI', 'Brak ID')
             area_sqm = row['area_sqm']
             area_ha = area_sqm / 10000
             messages.append(f"Działka nr {index + 1}. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
         
-        gdf_reprojected['message'] = messages
+        # Add summary message if there are more results
+        if summary:
+            messages.append(summary)
         
-        return gdf_reprojected.to_json()
+        limited_gdf['message'] = messages
+        
+        return limited_gdf.to_json()
     except Exception as e:
         return f"Error finding the {n} largest parcels: {e}"
 
@@ -231,16 +270,23 @@ def find_parcels_above_area(min_area: float, db_engine: Engine) -> str:
         
         gdf_reprojected = gdf.to_crs(epsg=4326)
         
+        # Limit results for display
+        limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+        
         messages = []
-        for index, row in gdf.iterrows():
+        for index, row in limited_gdf.iterrows():
             parcel_id = row.get('ID_DZIALKI', 'Brak ID')
             area_sqm = row['area_sqm']
             area_ha = area_sqm / 10000
             messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
-            
-        gdf_reprojected['message'] = messages
         
-        return gdf_reprojected.to_json()
+        # Add summary message if there are more results
+        if summary:
+            messages.append(summary)
+            
+        limited_gdf['message'] = messages
+        
+        return limited_gdf.to_json()
     except Exception as e:
         return f"Error finding parcels above {min_area} m²: {e}"
 
@@ -280,16 +326,23 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
 
         gdf_reprojected = gdf.to_crs(epsg=4326)
 
+        # Limit results for display
+        limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+
         messages = []
-        for index, row in gdf.iterrows():
+        for index, row in limited_gdf.iterrows():
             parcel_id = row.get('ID_DZIALKI', 'Brak ID')
             area_sqm = row['area_sqm']
             area_ha = area_sqm / 10000
             messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
 
-        gdf_reprojected['message'] = messages
+        # Add summary message if there are more results
+        if summary:
+            messages.append(summary)
 
-        return gdf_reprojected.to_json()
+        limited_gdf['message'] = messages
+
+        return limited_gdf.to_json()
     except Exception as e:
         logger.error(f"Error in find_parcels_near_gpz tool: {e}", exc_info=True)
         # Re-raise the exception to be handled by the agent/caller,
@@ -333,16 +386,23 @@ def find_parcels_without_buildings(db_engine: Engine) -> str:
         try:
             gdf_reprojected = gdf.to_crs(epsg=4326)
             
+            # Limit results for display
+            limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+            
             messages = []
-            for index, row in gdf.iterrows():
+            for index, row in limited_gdf.iterrows():
                 parcel_id = row.get('ID_DZIALKI', 'Brak ID')
                 area_sqm = row['area_sqm']
                 area_ha = area_sqm / 10000
                 messages.append(f"Niezabudowana działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
             
-            gdf_reprojected['message'] = messages
+            # Add summary message if there are more results
+            if summary:
+                messages.append(summary)
             
-            return gdf_reprojected.to_json()
+            limited_gdf['message'] = messages
+            
+            return limited_gdf.to_json()
             
         except Exception as e:
             raise GISDataProcessingError(

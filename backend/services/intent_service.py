@@ -63,9 +63,12 @@ class Chat(BaseModel):
     intent: Literal['chat'] = "chat"
 
 
-# --- Union of all possible routes ---
+# --- Simplified Route Model ---
 class Route(BaseModel):
-    route: Union[FindLargestParcel, FindNLargestParcels, FindParcelsAboveArea, FindParcelsNearGpz, FindParcelsWithoutBuildings, ExportToPdf, Chat]
+    intent: str = Field(description="Intent name")
+    n: Optional[int] = Field(None, description="Number for n_largest_parcels")
+    min_area: Optional[float] = Field(None, description="Min area for parcels_above_area")
+    radius_meters: Optional[int] = Field(None, description="Radius for parcels_near_gpz")
 
 
 class IntentClassificationService:
@@ -161,8 +164,8 @@ Schema: {format_instructions}"""
                 response = classification_chain.invoke({"query": query})
                 duration = time.time() - start_time
                 
-                # Extract route details
-                route_details = response.get('route', {})
+                # Extract route details - now response is directly the route
+                route_details = response
                 intent = route_details.get("intent")
                 
                 if not intent:

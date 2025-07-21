@@ -11,6 +11,38 @@ from models.domain import ParcelCriteria, QueryResult, GISOperationResult
 from exceptions import GeoAsystentException, GISDataProcessingError, SpatialQueryError
 from utils.db_logger import log_gis_operation
 
+
+def limit_results_for_display(gdf, max_display=5, item_type="działka"):
+    """
+    Limit results for chat display and add summary message.
+    
+    Args:
+        gdf: GeoDataFrame with results
+        max_display: Maximum number of items to show in chat
+        item_type: Type of item (działka, budynek, etc.)
+    
+    Returns:
+        Tuple of (limited_gdf, summary_message)
+    """
+    total_count = len(gdf)
+    
+    if total_count <= max_display:
+        return gdf, None
+    
+    # Limit to first max_display results
+    limited_gdf = gdf.head(max_display).copy()
+    
+    # Create summary message
+    remaining = total_count - max_display
+    if item_type == "działka":
+        summary = f"Wyświetlono {max_display} z {total_count} działek. Pozostałe {remaining} działek dostępne w PDF."
+    elif item_type == "budynek":
+        summary = f"Wyświetlono {max_display} z {total_count} budynków. Pozostałe {remaining} budynków dostępne w PDF."
+    else:
+        summary = f"Wyświetlono {max_display} z {total_count} wyników. Pozostałe {remaining} wyników dostępne w PDF."
+    
+    return limited_gdf, summary
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,6 +147,21 @@ class GISService:
             # Reproject to WGS84
             gdf_reprojected = gdf.to_crs(epsg=4326)
             
+            # Limit results for display if more than 5
+            if len(gdf_reprojected) > 5:
+                limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+                
+                # Add summary message as a property of the last feature
+                if summary and 'message' in limited_gdf.columns:
+                    messages = limited_gdf['message'].tolist()
+                    # Add summary to the last message instead of as a separate item
+                    if messages:
+                        messages[-1] = f"{messages[-1]}\n\n{summary}"
+                        limited_gdf['message'] = messages
+                
+                self.logger.info(f"Found {len(gdf_reprojected)} largest parcels, showing {len(limited_gdf)}")
+                return limited_gdf.to_json()
+            
             self.logger.info(f"Found {len(gdf_reprojected)} largest parcels")
             return gdf_reprojected.to_json()
             
@@ -144,6 +191,21 @@ class GISService:
             
             # Reproject to WGS84
             gdf_reprojected = gdf.to_crs(epsg=4326)
+            
+            # Limit results for display if more than 5
+            if len(gdf_reprojected) > 5:
+                limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+                
+                # Add summary message as a property of the last feature
+                if summary and 'message' in limited_gdf.columns:
+                    messages = limited_gdf['message'].tolist()
+                    # Add summary to the last message instead of as a separate item
+                    if messages:
+                        messages[-1] = f"{messages[-1]}\n\n{summary}"
+                        limited_gdf['message'] = messages
+                
+                self.logger.info(f"Found {len(gdf_reprojected)} parcels above {min_area} m², showing {len(limited_gdf)}")
+                return limited_gdf.to_json()
             
             self.logger.info(f"Found {len(gdf_reprojected)} parcels above {min_area} m²")
             return gdf_reprojected.to_json()
@@ -179,6 +241,21 @@ class GISService:
             # Reproject to WGS84
             gdf_reprojected = gdf.to_crs(epsg=4326)
             
+            # Limit results for display if more than 5
+            if len(gdf_reprojected) > 5:
+                limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+                
+                # Add summary message as a property of the last feature
+                if summary and 'message' in limited_gdf.columns:
+                    messages = limited_gdf['message'].tolist()
+                    # Add summary to the last message instead of as a separate item
+                    if messages:
+                        messages[-1] = f"{messages[-1]}\n\n{summary}"
+                        limited_gdf['message'] = messages
+                
+                self.logger.info(f"Found {len(gdf_reprojected)} parcels within {radius_meters}m of GPZ, showing {len(limited_gdf)}")
+                return limited_gdf.to_json()
+            
             self.logger.info(f"Found {len(gdf_reprojected)} parcels within {radius_meters}m of GPZ")
             return gdf_reprojected.to_json()
             
@@ -207,18 +284,25 @@ class GISService:
             # Reproject to WGS84
             gdf_reprojected = gdf.to_crs(epsg=4326)
             
+            # Limit results for display
+            limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
+            
             # Add descriptive messages
             messages = []
-            for _, row in gdf_reprojected.iterrows():
+            for _, row in limited_gdf.iterrows():
                 parcel_id = row.get('ID_DZIALKI', 'Brak ID')
                 area_sqm = row.get('area_sqm', 0)
                 area_ha = area_sqm / 10000 if area_sqm else 0
                 messages.append(f"Niezabudowana działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
             
-            gdf_reprojected['message'] = messages
+            # Add summary message to the last message instead of as a separate item
+            if summary and messages:
+                messages[-1] = f"{messages[-1]}\n\n{summary}"
             
-            self.logger.info(f"Found {len(gdf_reprojected)} parcels without buildings")
-            return gdf_reprojected.to_json()
+            limited_gdf['message'] = messages
+            
+            self.logger.info(f"Found {len(gdf_reprojected)} parcels without buildings, showing {len(limited_gdf)}")
+            return limited_gdf.to_json()
             
         except Exception as e:
             self.logger.error(f"Failed to find parcels without buildings: {e}")
