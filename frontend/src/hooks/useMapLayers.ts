@@ -240,13 +240,26 @@ export const useMapLayers = (): UseMapLayersReturn => {
   }, []); // Empty dependency array - only run once on mount
 
   const toggleLayerVisibility = useCallback((layerId: number) => {
-    setLayers(prevLayers =>
-      prevLayers.map(layer =>
-        layer.id === layerId 
-          ? { ...layer, visible: !layer.visible }
-          : layer
-      )
-    );
+    setLayers(prevLayers => {
+      const targetLayer = prevLayers.find(layer => layer.id === layerId);
+      if (!targetLayer) return prevLayers;
+
+      // Check if this is a GPZ layer
+      const isGPZLayer = targetLayer.name.includes('GPZ');
+      
+      return prevLayers.map(layer => {
+        if (layer.id === layerId) {
+          // Toggle the clicked layer
+          return { ...layer, visible: !layer.visible };
+        } else if (isGPZLayer && layer.name.includes('GPZ') && layer.id !== layerId) {
+          // If we're enabling a GPZ layer, disable other GPZ layers
+          return targetLayer.visible ? layer : { ...layer, visible: false };
+        } else {
+          // Keep other layers unchanged
+          return layer;
+        }
+      });
+    });
   }, []);
 
   const refreshLayer = useCallback(async (id: number) => {
