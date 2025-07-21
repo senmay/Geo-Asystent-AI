@@ -28,13 +28,12 @@ class GISService:
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
     
     @log_gis_operation("layer_retrieval")
-    def get_layer_as_geojson(self, layer_name: str, use_low_resolution: bool = True) -> str:
+    def get_layer_as_geojson(self, layer_name: str) -> str:
         """
         Get layer data as GeoJSON string.
         
         Args:
             layer_name: Name of the layer to retrieve
-            use_low_resolution: Whether to use low resolution version
             
         Returns:
             GeoJSON string
@@ -45,7 +44,7 @@ class GISService:
         self.logger.info(f"Retrieving layer as GeoJSON: {layer_name}")
         
         try:
-            gdf = self.repository.get_layer_data(layer_name, use_low_resolution)
+            gdf = self.repository.get_layer_data(layer_name)
             
             # Reproject to WGS84 for web display
             gdf_reprojected = gdf.to_crs(epsg=4326)
@@ -249,7 +248,7 @@ class GISService:
                 "table_name": layer_config.table_name,
                 "geometry_column": layer_config.geometry_column,
                 "id_column": layer_config.id_column,
-                "has_low_resolution": layer_config.has_low_resolution,
+
                 "bounds": bounds
             }
             
@@ -297,9 +296,9 @@ class GISService:
             layer_info = self.get_layer_info(layer_name)
             
             # For parcels, get area statistics
-            if layer_name in ["parcels", "działki"]:
+            if layer_name in ["dzialki", "działki"]:
                 # Get some sample data to calculate statistics
-                gdf = self.repository.get_layer_data(layer_name, use_low_resolution=True)
+                gdf = self.repository.get_layer_data(layer_name)
                 
                 if not gdf.empty and 'area_sqm' in gdf.columns:
                     area_stats = {
@@ -340,7 +339,7 @@ class GISService:
         
         try:
             # Get parcel data
-            gdf = self.repository.get_layer_data("parcels", use_low_resolution=True)
+            gdf = self.repository.get_layer_data("dzialki")
             
             if gdf.empty:
                 return {"error": "No parcel data available"}
@@ -411,7 +410,7 @@ class GISService:
         
         try:
             layer_config = self.repository.get_layer_config(layer_name)
-            gdf = self.repository.get_layer_data(layer_name, use_low_resolution=False)
+            gdf = self.repository.get_layer_data(layer_name)
             
             validation_results = {
                 "layer_name": layer_name,

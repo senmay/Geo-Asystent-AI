@@ -40,11 +40,7 @@ export const getPointStyle = (layerName?: string): PointStyleOptions => {
     }
 };
 
-// Helper function to create a marker with the correct style
-export const createStyledCircleMarker = (latlng: L.LatLng, layerName?: string): L.CircleMarker => {
-    const style = getPointStyle(layerName);
-    return L.circleMarker(latlng, { ...style, radius: style.radius ?? 8 });
-};
+// createStyledCircleMarker removed - no longer used
 
 // --- Line and Polygon Styles ---
 // Defines the appearance of lines and polygons.
@@ -56,12 +52,7 @@ const defaultPathStyle: PathStyleOptions = {
     fillOpacity: 0.2,
 };
 
-const parcelsPathStyle: PathStyleOptions = {
-    color: "#00ff00", // green
-    weight: 1,
-    opacity: 1,
-    fillOpacity: 0.1,
-};
+// parcelsPathStyle removed - no longer used
 
 export const getPathStyle = (layerName?: string): PathStyleOptions => {
     switch (layerName) {

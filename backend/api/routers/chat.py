@@ -36,17 +36,7 @@ async def process_chat(
         logger.info(f"Classified intent: '{intent}' with details: {route_details}")
         
         # Process based on intent
-        if intent == 'get_gis_data':
-            if not route_details.get('layer_name'):
-                return ChatResponse(
-                    type="text",
-                    data="Nie sprecyzowałeś, którą warstwę wyświetlić. Spróbuj \"pokaż działki\" lub \"pokaż budynki\".",
-                    intent=intent
-                )
-            geojson_data = gis_service.get_layer_as_geojson(route_details['layer_name'])
-            return ChatResponse(type="geojson", data=geojson_data, intent=intent)
-        
-        elif intent == 'find_largest_parcel':
+        if intent == 'find_largest_parcel':
             geojson_data = gis_service.find_largest_parcel()
             return ChatResponse(type="geojson", data=geojson_data, intent=intent)
         
@@ -58,7 +48,7 @@ async def process_chat(
             geojson_data = gis_service.find_parcels_above_area(route_details['min_area'])
             return ChatResponse(type="geojson", data=geojson_data, intent=intent)
 
-        elif intent =='find_parcels_without_buildings':
+        elif intent == 'find_parcels_without_buildings':
             geojson_data = gis_service.find_parcels_without_buildings()
             return ChatResponse(type="geojson", data=geojson_data, intent=intent)            
         

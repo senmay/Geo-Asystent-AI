@@ -17,6 +17,20 @@ export interface LayerState {
   error?: string;
   type?: 'geojson' | 'wms';
   wmsConfig?: WMSConfig;
+  style?: {
+    pointColor?: string;
+    pointRadius?: number;
+    pointOpacity?: number;
+    pointFillOpacity?: number;
+    lineColor?: string;
+    lineWeight?: number;
+    lineOpacity?: number;
+    polygonColor?: string;
+    polygonWeight?: number;
+    polygonOpacity?: number;
+    polygonFillColor?: string;
+    polygonFillOpacity?: number;
+  };
 }
 
 export interface LayerConfig {
@@ -42,23 +56,15 @@ export interface UseMapLayersReturn {
   queryResult: GeoJsonFeatureCollection | null;
   isLoading: boolean;
   error: string | null;
-  toggleLayer: (id: number) => void;
-  setQueryResult: (data: GeoJsonFeatureCollection | null) => void;
-  refreshLayer: (id: number) => Promise<void>;
+  toggleLayerVisibility: (layerId: number) => void;
+  refreshLayer: (layerId: number) => Promise<void>;
   addLayer: (config: LayerConfig) => Promise<void>;
-  removeLayer: (id: number) => void;
+  removeLayer: (layerId: number) => void;
+  setQueryResult: (result: GeoJsonFeatureCollection | null) => void;
   clearError: () => void;
 }
 
-const DEFAULT_LAYERS: LayerConfig[] = [
-  { name: 'GPZ 110kV', apiName: 'gpz_POLSKA', color: '#ff0000', type: 'geojson' },
-  { name: 'Budynki przykładowe', apiName: 'buildings', color: '#3388ff', type: 'geojson' },
-  { name: 'Działki przykładowe', apiName: 'parcels', color: '#00ff00', type: 'geojson' },
-  { name: 'GPZ Wielkopolskie', apiName: 'GPZ_WIELKOPOLSKIE', color: '#ff00ff', type: 'geojson' },
-  { name: 'Województwa', apiName: 'wojewodztwa', color: '#800080', type: 'geojson' },
-  { name: 'Natura 2000', apiName: 'natura2000', color: '#008000', type: 'geojson' }
-];
-
+// WMS layers configuration - these are external services not in our database
 const WMS_LAYERS: LayerConfig[] = [
   {
     name: 'Działki ewidencyjne z powiatów',
@@ -118,36 +124,71 @@ const WMS_LAYERS: LayerConfig[] = [
   }
 ];
 
-const ALL_LAYERS = [...DEFAULT_LAYERS, ...WMS_LAYERS];
-
-export const useMapLayers = (
-  initialLayers: LayerConfig[] = ALL_LAYERS
-): UseMapLayersReturn => {
+export const useMapLayers = (): UseMapLayersReturn => {
   const [layers, setLayers] = useState<LayerState[]>([]);
   const [queryResult, setQueryResult] = useState<GeoJsonFeatureCollection | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [layerConfigs, setLayerConfigs] = useState<LayerConfig[]>([]);
   const { error, handleError, clearError } = useErrorHandler();
 
-  // Load initial layers on mount
+  // Load layer configurations and initial layers on mount
   useEffect(() => {
-    const loadInitialLayers = async () => {
-      if (initialLayers.length === 0) return;
-
+    const loadLayerConfigurations = async () => {
       setIsLoading(true);
       clearError();
 
       try {
+        // First fetch layer configurations from API
+        const response = await fetch('/api/v1/layers/config');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch layer config: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const apiLayerConfigs = data.layers;
+        
+        // Convert API layer config to our internal format
+        const geojsonLayers: LayerConfig[] = apiLayerConfigs.map((layer: any) => ({
+          name: layer.displayName,
+          apiName: layer.layerName,
+          color: layer.style.polygonColor || layer.style.lineColor || layer.style.pointColor,
+          type: 'geojson' as const
+        }));
+        
+        // Combine with WMS layers
+        const allLayers = [...geojsonLayers, ...WMS_LAYERS];
+        setLayerConfigs(allLayers);
+        
+        // Then load the actual layer data
         const gisService = getGISService();
-        const layerPromises = initialLayers.map(async (layerConfig, index) => {
+        const layerPromises = allLayers.map(async (layerConfig, index) => {
+          // Find corresponding API config for visibility
+          const apiConfig = apiLayerConfigs.find((api: any) => api.layerName === layerConfig.apiName);
+          const defaultVisible = apiConfig?.defaultVisible || false;
+          
           const layerState: LayerState = {
             id: Date.now() + index,
             name: layerConfig.name,
             data: { type: 'FeatureCollection', features: [] },
-            visible: !['GPZ Wielkopolskie', 'Województwa', 'Natura 2000', 'Działki ewidencyjne z powiatów', 'Numery działek', 'Kontury klasyfikacyjne', 'Użytki gruntowe'].includes(layerConfig.name),
+            visible: defaultVisible, // Use dynamic visibility from API
             color: layerConfig.color,
             loading: layerConfig.type === 'geojson',
             type: layerConfig.type || 'geojson',
             wmsConfig: layerConfig.wmsConfig,
+            style: apiConfig ? {
+              pointColor: apiConfig.style.pointColor,
+              pointRadius: apiConfig.style.pointRadius,
+              pointOpacity: apiConfig.style.pointOpacity,
+              pointFillOpacity: apiConfig.style.pointFillOpacity,
+              lineColor: apiConfig.style.lineColor,
+              lineWeight: apiConfig.style.lineWeight,
+              lineOpacity: apiConfig.style.lineOpacity,
+              polygonColor: apiConfig.style.polygonColor,
+              polygonWeight: apiConfig.style.polygonWeight,
+              polygonOpacity: apiConfig.style.polygonOpacity,
+              polygonFillColor: apiConfig.style.polygonFillColor,
+              polygonFillOpacity: apiConfig.style.polygonFillOpacity,
+            } : undefined,
           };
 
           // Only load data for GeoJSON layers
@@ -156,7 +197,7 @@ export const useMapLayers = (
           }
 
           try {
-            const data = await gisService.getLayer(layerConfig.apiName, true);
+            const data = await gisService.getLayer(layerConfig.apiName);
             return { ...layerState, data, loading: false };
           } catch (error) {
             console.error(`Error loading layer ${layerConfig.name}:`, error);
@@ -171,43 +212,41 @@ export const useMapLayers = (
         const loadedLayers = await Promise.all(layerPromises);
         setLayers(loadedLayers);
       } catch (error) {
+        console.error('Failed to load layer configurations:', error);
         handleError(error);
+        
+        // Fallback to minimal WMS layers if API fails
+        console.warn('API failed, loading only WMS layers as fallback');
+        setLayerConfigs(WMS_LAYERS);
+        
+        const fallbackLayerStates = WMS_LAYERS.map((layerConfig, index) => ({
+          id: Date.now() + index,
+          name: layerConfig.name,
+          data: { type: 'FeatureCollection' as const, features: [] },
+          visible: false, // WMS layers hidden by default in fallback
+          color: layerConfig.color,
+          loading: false,
+          type: layerConfig.type || 'geojson' as const,
+          wmsConfig: layerConfig.wmsConfig,
+        }));
+
+        setLayers(fallbackLayerStates);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadInitialLayers();
+    loadLayerConfigurations();
   }, []); // Empty dependency array - only run once on mount
 
-  const toggleLayer = useCallback((id: number) => {
-    setLayers(prevLayers => {
-      const toggledLayer = prevLayers.find(l => l.id === id);
-      if (!toggledLayer) return prevLayers;
-
-      const isTogglingOn = !toggledLayer.visible;
-      const toggledName = toggledLayer.name;
-
-      return prevLayers.map(layer => {
-        // The layer being toggled
-        if (layer.id === id) {
-          return { ...layer, visible: !layer.visible };
-        }
-
-        // If we are turning a GPZ layer on, turn the other one off.
-        if (isTogglingOn) {
-          if (toggledName === 'GPZ 110kV' && layer.name === 'GPZ Wielkopolskie') {
-            return { ...layer, visible: false };
-          }
-          if (toggledName === 'GPZ Wielkopolskie' && layer.name === 'GPZ 110kV') {
-            return { ...layer, visible: false };
-          }
-        }
-
-        // Otherwise, return the layer as is.
-        return layer;
-      });
-    });
+  const toggleLayerVisibility = useCallback((layerId: number) => {
+    setLayers(prevLayers =>
+      prevLayers.map(layer =>
+        layer.id === layerId 
+          ? { ...layer, visible: !layer.visible }
+          : layer
+      )
+    );
   }, []);
 
   const refreshLayer = useCallback(async (id: number) => {
@@ -215,12 +254,13 @@ export const useMapLayers = (
     if (!layer) return;
 
     // Find the original layer config to get the API name
-    const layerConfig = ALL_LAYERS.find(config => config.name === layer.name);
+    const layerConfig = layerConfigs.find(config => config.name === layer.name);
     if (!layerConfig) return;
 
     // Only refresh GeoJSON layers
     if (layerConfig.type === 'wms') return;
 
+    // Set loading state
     setLayers(prevLayers =>
       prevLayers.map(l =>
         l.id === id ? { ...l, loading: true, error: undefined } : l
@@ -229,7 +269,7 @@ export const useMapLayers = (
 
     try {
       const gisService = getGISService();
-      const data = await gisService.getLayer(layerConfig.apiName, true);
+      const data = await gisService.getLayer(layerConfig.apiName);
 
       setLayers(prevLayers =>
         prevLayers.map(l =>
@@ -240,53 +280,57 @@ export const useMapLayers = (
       console.error(`Error refreshing layer ${layer.name}:`, error);
       setLayers(prevLayers =>
         prevLayers.map(l =>
-          l.id === id ? {
-            ...l,
-            loading: false,
-            error: `Failed to refresh ${layer.name}`
-          } : l
+          l.id === id 
+            ? { ...l, loading: false, error: `Failed to refresh ${layer.name}` }
+            : l
         )
       );
     }
-  }, [layers]);
+  }, [layers, layerConfigs]);
 
   const addLayer = useCallback(async (config: LayerConfig) => {
+    const newId = Date.now();
+    
     const newLayer: LayerState = {
-      id: Date.now(),
+      id: newId,
       name: config.name,
       data: { type: 'FeatureCollection', features: [] },
       visible: true,
       color: config.color,
-      loading: true,
+      loading: config.type === 'geojson',
+      type: config.type || 'geojson',
+      wmsConfig: config.wmsConfig,
     };
 
+    // Add layer to state immediately
     setLayers(prevLayers => [...prevLayers, newLayer]);
 
-    try {
-      const gisService = getGISService();
-      const data = await gisService.getLayer(config.apiName, true);
+    // Load data for GeoJSON layers
+    if (config.type !== 'wms') {
+      try {
+        const gisService = getGISService();
+        const data = await gisService.getLayer(config.apiName);
 
-      setLayers(prevLayers =>
-        prevLayers.map(layer =>
-          layer.id === newLayer.id ? { ...layer, data, loading: false } : layer
-        )
-      );
-    } catch (error) {
-      console.error(`Error adding layer ${config.name}:`, error);
-      setLayers(prevLayers =>
-        prevLayers.map(layer =>
-          layer.id === newLayer.id ? {
-            ...layer,
-            loading: false,
-            error: `Failed to load ${config.name}`
-          } : layer
-        )
-      );
+        setLayers(prevLayers =>
+          prevLayers.map(layer =>
+            layer.id === newId ? { ...layer, data, loading: false } : layer
+          )
+        );
+      } catch (error) {
+        console.error(`Error loading new layer ${config.name}:`, error);
+        setLayers(prevLayers =>
+          prevLayers.map(layer =>
+            layer.id === newId 
+              ? { ...layer, loading: false, error: `Failed to load ${config.name}` }
+              : layer
+          )
+        );
+      }
     }
   }, []);
 
-  const removeLayer = useCallback((id: number) => {
-    setLayers(prevLayers => prevLayers.filter(layer => layer.id !== id));
+  const removeLayer = useCallback((layerId: number) => {
+    setLayers(prevLayers => prevLayers.filter(layer => layer.id !== layerId));
   }, []);
 
   return {
@@ -294,11 +338,11 @@ export const useMapLayers = (
     queryResult,
     isLoading,
     error,
-    toggleLayer,
-    setQueryResult,
+    toggleLayerVisibility,
     refreshLayer,
     addLayer,
     removeLayer,
+    setQueryResult,
     clearError,
   };
 };

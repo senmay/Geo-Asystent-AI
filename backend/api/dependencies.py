@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy.engine import Engine
 
 from config.database import get_db_engine
-from services import IntentClassificationService, LLMService, GISService
+from services import IntentClassificationService, LLMService, GISService, LayerConfigService
 
 
 def get_intent_service() -> IntentClassificationService:
@@ -20,3 +20,8 @@ def get_llm_service() -> LLMService:
 def get_gis_service(db_engine: Engine = Depends(get_db_engine)) -> GISService:
     """Dependency for GIS service."""
     return GISService(db_engine)
+
+
+def get_layer_config_service(db_engine: Engine = Depends(get_db_engine)) -> LayerConfigService:
+    """Dependency for layer configuration service."""
+    return LayerConfigService(db_engine)

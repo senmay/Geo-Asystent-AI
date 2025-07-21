@@ -7,6 +7,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy import text
 
 from .base import BaseRepository
+from services.layer_config_service import LayerConfigService, LayerConfig
 from exceptions import (
     LayerNotFoundError,
     InvalidLayerNameError,
@@ -15,18 +16,6 @@ from exceptions import (
     SpatialQueryError
 )
 from utils.db_logger import log_database_operation
-
-
-@dataclass
-class LayerConfig:
-    """Configuration for a GIS layer."""
-    name: str
-    table_name: str
-    geometry_column: str
-    id_column: str
-    display_name: str
-    description: Optional[str] = None
-    has_low_resolution: bool = True
 
 
 @dataclass
@@ -43,72 +32,18 @@ class GISRepository(BaseRepository):
     
     def __init__(self, db_engine: Engine):
         super().__init__(db_engine)
+        self.layer_config_service = LayerConfigService(db_engine)
         
-        # Define available layers
-        self.layers = {
-            "parcels": LayerConfig(
-                name="parcels",
-                table_name="parcels",
-                geometry_column="geometry",
-                id_column="ID_DZIALKI",
-                display_name="Działki_przykładowe",
-                description="Land parcels with ownership information",
-                has_low_resolution=True
-            ),
-            "buildings": LayerConfig(
-                name="buildings",
-                table_name="buildings",
-                geometry_column="geometry",
-                id_column="ID_BUDYNKU",
-                display_name="Budynki_przykładowe",
-                description="Building footprints",
-                has_low_resolution=True
-            ),
-            "gpz_POLSKA": LayerConfig(
-                name="gpz_POLSKA",
-                table_name="gpz_110kv",
-                geometry_column="geom",
-                id_column="id",
-                display_name="GPZ 110kV",
-                description="Electrical substations 110kV",
-                has_low_resolution=False
-            ),
-            "gpz_WIELKOPOLSKIE": LayerConfig(
-                name="GPZ_WIELKOPOLSKIE",
-                table_name="GPZ_WIELKOPOLSKIE",
-                geometry_column="geom",
-                id_column="id",
-                display_name="GPZ Wielkopolskie",
-                description="Electrical substations in Wielkopolska region",
-                has_low_resolution=False
-            ),
-            "wojewodztwa": LayerConfig(
-                name="wojewodztwa",
-                table_name="Wojewodztwa",
-                geometry_column="geom",
-                id_column="JPT_NAZWA_",
-                display_name="Województwa",
-                description="Voivodeship boundaries",
-                has_low_resolution=False
-            ),
-            "natura2000": LayerConfig(
-                name="natura2000",
-                table_name="natura 2000",
-                geometry_column="geom",
-                id_column="id",
-                display_name="Natura 2000",
-                description="Natura 2000 protected areas",
-                has_low_resolution=False
-            )
-        }
+    @property
+    def layers(self) -> Dict[str, LayerConfig]:
+        """Get all available layers from database configuration."""
+        return self.layer_config_service.get_all_layers()
     
     def get_available_tables(self) -> List[str]:
         """Get list of available GIS tables."""
         tables = []
         for layer in self.layers.values():
             tables.append(layer.table_name)
-            if layer.has_low_resolution:
-                tables.append(f"{layer.table_name}_low")
         return tables
     
     def get_layer_config(self, layer_name: str) -> LayerConfig:
@@ -129,19 +64,19 @@ class GISRepository(BaseRepository):
         
         # Map common names to layer keys
         name_mapping = {
-            "działki": "parcels",
-            "dzialki": "parcelsw",
-            "dzialka": "parcels",
-            "działka": "parcels",
-            "działki_przykładowe": "parcels",
-            "dzialki_przykladowe": "parcels",
-            "przykladowe_dzialki": "parcels",
-            "przykladowe_dzialka": "parcels",
-            "parcels": "parcels",
-            "parcel": "parcels",
-            "budynki": "buildings", 
-            "buildings": "buildings",
-            "building": "buildings",
+            "działki": "dzialki",
+            "dzialki": "dzialki",
+            "dzialka": "dzialki",
+            "działka": "dzialki",
+            "działki_przykładowe": "dzialki",
+            "dzialki_przykladowe": "dzialki",
+            "przykladowe_dzialki": "dzialki",
+            "przykladowe_dzialka": "dzialki",
+            "parcels": "dzialki",
+            "parcel": "dzialki",
+            "budynki": "budynki", 
+            "buildings": "budynki",
+            "building": "budynki",
             "gpz_wielkopolskie": "gpz_WIELKOPOLSKIE",
             "gpz": "gpz_POLSKA",
             "gpz_110kv": "gpz_POLSKA",
@@ -166,13 +101,12 @@ class GISRepository(BaseRepository):
         
         return self.layers[layer_key]
     
-    def get_layer_data(self, layer_name: str, use_low_resolution: bool = True) -> gpd.GeoDataFrame:
+    def get_layer_data(self, layer_name: str) -> gpd.GeoDataFrame:
         """
         Retrieve complete layer data as GeoDataFrame.
         
         Args:
             layer_name: Name of the layer to retrieve
-            use_low_resolution: Whether to use low resolution version if available
             
         Returns:
             GeoDataFrame with layer data
@@ -182,12 +116,7 @@ class GISRepository(BaseRepository):
             GISDataProcessingError: If data processing fails
         """
         layer_config = self.get_layer_config(layer_name)
-        
-        # Determine table to use
-        if use_low_resolution and layer_config.has_low_resolution:
-            table_name = f"{layer_config.table_name}_low"
-        else:
-            table_name = layer_config.table_name
+        table_name = layer_config.table_name
         
         self.logger.info(f"Retrieving layer data: {layer_name} from table {table_name}")
         
@@ -202,32 +131,19 @@ class GISRepository(BaseRepository):
                 )
             
             if gdf.empty:
-                # Try fallback to full resolution if low resolution is empty
-                if use_low_resolution and layer_config.has_low_resolution:
-                    self.logger.warning(f"Low resolution table {table_name} is empty, trying full resolution")
-                    return self.get_layer_data(layer_name, use_low_resolution=False)
-                else:
-                    raise LayerNotFoundError(layer_name=layer_name)
+                raise LayerNotFoundError(layer_name=layer_name)
             
             self.logger.info(f"Successfully retrieved {len(gdf)} features from {table_name}")
             
             # Add metadata
             gdf['loaded_layer'] = table_name
-            gdf['layer_config'] = layer_config.name
+            gdf['layer_config'] = layer_config.layer_name
             
             return gdf
             
         except (InvalidLayerNameError, LayerNotFoundError):
             raise
         except Exception as e:
-            # Try fallback to full resolution
-            if use_low_resolution and layer_config.has_low_resolution:
-                self.logger.warning(f"Failed to read from {table_name}, trying full resolution")
-                try:
-                    return self.get_layer_data(layer_name, use_low_resolution=False)
-                except Exception:
-                    pass
-            
             raise GISDataProcessingError(
                 operation=f"reading layer data from {table_name}",
                 original_error=e
@@ -247,7 +163,7 @@ class GISRepository(BaseRepository):
             SpatialQueryError: If query execution fails
         """
         layer_config = self.get_layer_config("parcels")
-        table_name = f"{layer_config.table_name}_low"
+        table_name = layer_config.table_name
         
         # Build WHERE clause
         where_conditions = []
@@ -333,7 +249,7 @@ class GISRepository(BaseRepository):
             SpatialQueryError: If spatial query fails
         """
         parcels_config = self.get_layer_config("parcels")
-        parcels_table = f"{parcels_config.table_name}_low"
+        parcels_table = parcels_config.table_name
         
         sql = f"""
             SELECT p.*, ST_Area(p.geometry) as area_sqm
@@ -397,7 +313,7 @@ class GISRepository(BaseRepository):
         """
         try:
             layer_config = self.get_layer_config(layer_name)
-            table_name = f"{layer_config.table_name}_low" if layer_config.has_low_resolution else layer_config.table_name
+            table_name = layer_config.table_name
             
             sql = f"""
                 SELECT 
@@ -434,8 +350,8 @@ class GISRepository(BaseRepository):
         parcels_config = self.get_layer_config("parcels")
         buildings_config = self.get_layer_config("buildings")
         
-        parcels_table = f"{parcels_config.table_name}_low"
-        buildings_table = f"{buildings_config.table_name}_low"
+        parcels_table = parcels_config.table_name
+        buildings_table = buildings_config.table_name
         
         sql = f"""
             SELECT p.*, ST_Area(p.geometry) as area_sqm

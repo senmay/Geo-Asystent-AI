@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, JSONResponse
 from typing import Optional, List
 
-from services import GISService
-from api.dependencies import get_gis_service
+from services import GISService, LayerConfigService
+from api.dependencies import get_gis_service, get_layer_config_service
 from exceptions import GeoAsystentException, LayerNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -14,27 +14,49 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["layers"])
 
 
-@router.get("/layers/{layer_name}")
-async def get_layer(
-    layer_name: str,
-    use_low_resolution: bool = Query(True, description="Whether to use low resolution version if available"),
-    gis_service: GISService = Depends(get_gis_service)
+@router.get("/layers/config")
+async def get_layer_config(
+    layer_config_service: LayerConfigService = Depends(get_layer_config_service)
 ):
-    """
-    Retrieve a specific GIS layer by name as GeoJSON.
-    
-    This endpoint directly fetches layer data without using the AI agent.
-    """
-    logger.info(f"Direct layer request: {layer_name} (low_res: {use_low_resolution})")
-    
+    """Get layer configuration."""
     try:
-        geojson_data = gis_service.get_layer_as_geojson(layer_name, use_low_resolution)
-        return Response(content=geojson_data, media_type="application/json")
-    except GeoAsystentException:
-        # Custom exceptions are handled by middleware
-        raise
+        configs = layer_config_service.get_all_layers()
+        
+        # Convert to list of dicts for JSON response
+        layers = []
+        for name, config in configs.items():
+            layers.append({
+                "layerName": config.layer_name,
+                "displayName": config.display_name,
+                "tableName": config.table_name,
+                "geometryColumn": config.geometry_column,
+                "idColumn": config.id_column,
+                "description": config.description,
+                "style": {
+                    "pointColor": config.style.point_color,
+                    "pointRadius": config.style.point_radius,
+                    "pointOpacity": config.style.point_opacity,
+                    "pointFillOpacity": config.style.point_fill_opacity,
+                    "lineColor": config.style.line_color,
+                    "lineWeight": config.style.line_weight,
+                    "lineOpacity": config.style.line_opacity,
+                    "lineDashArray": config.style.line_dash_array,
+                    "polygonColor": config.style.polygon_color,
+                    "polygonWeight": config.style.polygon_weight,
+                    "polygonOpacity": config.style.polygon_opacity,
+                    "polygonFillColor": config.style.polygon_fill_color,
+                    "polygonFillOpacity": config.style.polygon_fill_opacity
+                },
+                "defaultVisible": config.default_visible,
+                "minZoom": config.min_zoom,
+                "maxZoom": config.max_zoom,
+                "clusterPoints": config.cluster_points,
+                "active": config.active
+            })
+        
+        return {"layers": layers}
     except Exception as e:
-        logger.error(f"Unexpected error retrieving layer: {e}")
+        logger.error(f"Failed to get layer configuration: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -48,6 +70,29 @@ async def list_layers(gis_service: GISService = Depends(get_gis_service)):
         return {"layers": layers}
     except Exception as e:
         logger.error(f"Failed to list layers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/layers/{layer_name}")
+async def get_layer(
+    layer_name: str,
+    gis_service: GISService = Depends(get_gis_service)
+):
+    """
+    Retrieve a specific GIS layer by name as GeoJSON.
+    
+    This endpoint directly fetches layer data without using the AI agent.
+    """
+    logger.info(f"Direct layer request: {layer_name}")
+    
+    try:
+        geojson_data = gis_service.get_layer_as_geojson(layer_name)
+        return Response(content=geojson_data, media_type="application/json")
+    except GeoAsystentException:
+        # Custom exceptions are handled by middleware
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving layer: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

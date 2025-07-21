@@ -16,7 +16,7 @@ const App: React.FC<AppProps> = ({ className, style }) => {
   const {
     layers,
     queryResult,
-    toggleLayer,
+    toggleLayerVisibility,
     setQueryResult,
     error,
     isLoading,
@@ -113,7 +113,7 @@ const App: React.FC<AppProps> = ({ className, style }) => {
       
       <LayerPane
         layers={layers}
-        onToggleLayer={toggleLayer}
+        onToggleLayer={toggleLayerVisibility}
         basemaps={basemaps}
         activeBasemap={activeBasemap}
         onBasemapChange={setActiveBasemap}
@@ -144,6 +144,7 @@ const App: React.FC<AppProps> = ({ className, style }) => {
                 data={layer.data} 
                 layerName={layer.name}
                 color={layer.color}
+                style={layer.style}
                 fitBounds={false} 
               />
             ))

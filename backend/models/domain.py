@@ -21,7 +21,6 @@ class LayerConfig:
     id_column: str
     display_name: str
     description: Optional[str] = None
-    has_low_resolution: bool = True
     layer_type: Optional[LayerType] = None
 
 

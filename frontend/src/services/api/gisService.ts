@@ -39,18 +39,10 @@ export class GISService {
    */
   async getLayer(
     layerName: string,
-    useLowResolution: boolean = true,
     options?: RequestOptions
   ): Promise<GeoJsonFeatureCollection> {
-    const params = new URLSearchParams();
-    if (useLowResolution !== undefined) {
-      params.append('use_low_resolution', useLowResolution.toString());
-    }
-  
-    const url = `${API_ENDPOINTS.LAYERS.BY_NAME(layerName)}${params.toString() ? `?${params.toString()}` : ''}`;
-  
+    const url = API_ENDPOINTS.LAYERS.BY_NAME(layerName);
     const response = await this.apiClient.get<GeoJsonFeatureCollection>(url, {}, options);
-  
     return response.data as GeoJsonFeatureCollection;
   }
 
@@ -109,13 +101,12 @@ export class GISService {
    */
   async getMultipleLayers(
     layerNames: string[],
-    useLowResolution: boolean = true,
     options?: RequestOptions
   ): Promise<Array<{ name: string; data: GeoJsonFeatureCollection; error?: string }>> {
     const results = await Promise.allSettled(
       layerNames.map(async (name) => {
         try {
-          const data = await this.getLayer(name, useLowResolution, options);
+          const data = await this.getLayer(name, options);
           return { name, data };
         } catch (error) {
           return { 
