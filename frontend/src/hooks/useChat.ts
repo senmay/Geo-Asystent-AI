@@ -2,7 +2,7 @@
  * Custom hook to manage chat state and API interactions
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { getChatService } from '../services';
 import { useErrorHandler } from './useErrorHandler';
 import type { GeoJsonFeatureCollection } from '../services/api/types';
@@ -28,11 +28,37 @@ export const useChat = (
 ): UseChatReturn => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const isInitializedRef = useRef(false);
   const { error, handleError, clearError } = useErrorHandler();
 
   const addMessage = useCallback((message: Message) => {
     setMessages(prev => [...prev, message]);
   }, []);
+
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      const welcomeMessage: Message = {
+        sender: 'bot',
+        text: `Cześć! Jestem Geo-Asystent AI - Twój asystent do pracy z danymi przestrzennymi.
+
+Obecnie oferuje funkcjonalność:
+• Wyszukiwanie 'n' najwiekszych dzialek
+• Wyszukiwanie dzialek o określonej powierzchni
+• Wyszukiwanie działek bez budynków
+• Eksport danych do pdf
+
+Przykładowe zapytania :
+- "pokaż największą działkę"
+- "pokaż 5 najwiekszych dzialek"
+- "pokaż działki bez budynków"
+
+Zadaj mi pytanie o dane GIS!`,
+        type: 'info'
+      };
+      addMessage(welcomeMessage);
+      isInitializedRef.current = true;
+    }
+  }, [addMessage]);
 
   const sendMessage = useCallback(async (query: string) => {
     if (!query.trim()) return;
@@ -49,7 +75,7 @@ export const useChat = (
 
     try {
       const chatService = getChatService();
-      
+
       // Validate query
       const validation = chatService.validateQuery(query);
       if (!validation.isValid) {
@@ -72,24 +98,24 @@ export const useChat = (
       // Handle response based on type
       if (response.type === 'geojson' && typeof response.content === 'object') {
         const geojsonData = response.content as GeoJsonFeatureCollection;
-        
+
         // Set GeoJSON result for map display
         onGeoJsonResult?.(geojsonData);
 
         // Create summary message
         const summaryText = chatService.createGeoJsonSummary(geojsonData);
-        const botMessage: Message = { 
-          sender: 'bot', 
-          text: summaryText, 
-          type: 'data' 
+        const botMessage: Message = {
+          sender: 'bot',
+          text: summaryText,
+          type: 'data'
         };
         addMessage(botMessage);
       } else {
         // Text response
-        const botMessage: Message = { 
-          sender: 'bot', 
-          text: response.content as string, 
-          type: 'data' 
+        const botMessage: Message = {
+          sender: 'bot',
+          text: response.content as string,
+          type: 'data'
         };
         addMessage(botMessage);
       }
@@ -107,6 +133,7 @@ export const useChat = (
 
   const clearMessages = useCallback(() => {
     setMessages([]);
+    isInitializedRef.current = false;
     clearError();
   }, [clearError]);
 
