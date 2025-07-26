@@ -1,8 +1,11 @@
 """Configuration validation utilities."""
 
 import sys
+import logging
 from typing import List, Tuple
 from .settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def validate_configuration() -> Tuple[bool, List[str]]:
@@ -54,44 +57,104 @@ def print_configuration_summary():
     try:
         settings = get_settings()
         
-        print("=== Geo-Asystent AI Configuration Summary ===")
-        print(f"App Name: {settings.app_name}")
-        print(f"App Version: {settings.app_version}")
-        print(f"Debug Mode: {settings.api.debug}")
-        print()
+        logger.info("=== Geo-Asystent AI Configuration Summary ===", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"App Name: {settings.app_name}", extra={
+            'operation': 'configuration_summary',
+            'app_name': settings.app_name,
+            'app_version': settings.app_version
+        })
+        logger.info(f"App Version: {settings.app_version}", extra={
+            'operation': 'configuration_summary',
+            'app_version': settings.app_version
+        })
+        logger.info(f"Debug Mode: {settings.api.debug}", extra={
+            'operation': 'configuration_summary',
+            'debug_mode': settings.api.debug
+        })
         
-        print("Database Configuration:")
-        print(f"  Host: {settings.database.host}:{settings.database.port}")
-        print(f"  Database: {settings.database.name}")
-        print(f"  User: {settings.database.user}")
-        print()
+        logger.info("Database Configuration:", extra={
+            'operation': 'configuration_summary',
+            'db_host': settings.database.host,
+            'db_port': settings.database.port,
+            'db_name': settings.database.name,
+            'db_user': settings.database.user
+        })
+        logger.info(f"  Host: {settings.database.host}:{settings.database.port}", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"  Database: {settings.database.name}", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"  User: {settings.database.user}", extra={
+            'operation': 'configuration_summary'
+        })
         
-        print("LLM Configuration:")
-        print(f"  Model: {settings.llm.model}")
-        print(f"  Temperature: {settings.llm.temperature}")
-        print(f"  API Key: {'Set' if settings.llm.api_key else 'Not set'}")
-        print()
+        logger.info("LLM Configuration:", extra={
+            'operation': 'configuration_summary',
+            'llm_model': settings.llm.model,
+            'llm_temperature': settings.llm.temperature,
+            'llm_api_key_set': bool(settings.llm.api_key)
+        })
+        logger.info(f"  Model: {settings.llm.model}", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"  Temperature: {settings.llm.temperature}", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"  API Key: {'Set' if settings.llm.api_key else 'Not set'}", extra={
+            'operation': 'configuration_summary'
+        })
         
-        print("API Configuration:")
-        print(f"  Host: {settings.api.host}:{settings.api.port}")
-        print(f"  CORS Origins: {', '.join(settings.api.cors_origins)}")
-        print()
+        logger.info("API Configuration:", extra={
+            'operation': 'configuration_summary',
+            'api_host': settings.api.host,
+            'api_port': settings.api.port,
+            'cors_origins_count': len(settings.api.cors_origins)
+        })
+        logger.info(f"  Host: {settings.api.host}:{settings.api.port}", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"  CORS Origins: {', '.join(settings.api.cors_origins)}", extra={
+            'operation': 'configuration_summary'
+        })
         
-        print("GIS Configuration:")
-        print(f"  Default CRS: {settings.gis.default_crs}")
-        print(f"  Max Features: {settings.gis.max_features}")
-        print()
+        logger.info("GIS Configuration:", extra={
+            'operation': 'configuration_summary',
+            'gis_default_crs': settings.gis.default_crs,
+            'gis_max_features': settings.gis.max_features
+        })
+        logger.info(f"  Default CRS: {settings.gis.default_crs}", extra={
+            'operation': 'configuration_summary'
+        })
+        logger.info(f"  Max Features: {settings.gis.max_features}", extra={
+            'operation': 'configuration_summary'
+        })
         
         is_valid, errors = validate_configuration()
         if is_valid:
-            print("✅ Configuration is valid!")
+            logger.info("✅ Configuration is valid!", extra={
+                'operation': 'configuration_validation',
+                'is_valid': True
+            })
         else:
-            print("❌ Configuration issues found:")
+            logger.warning("❌ Configuration issues found:", extra={
+                'operation': 'configuration_validation',
+                'is_valid': False,
+                'error_count': len(errors)
+            })
             for error in errors:
-                print(f"  - {error}")
+                logger.warning(f"  - {error}", extra={
+                    'operation': 'configuration_validation',
+                    'validation_error': error
+                })
                 
     except Exception as e:
-        print(f"Error loading configuration: {e}")
+        logger.error(f"Error loading configuration: {e}", extra={
+            'operation': 'configuration_summary',
+            'error_type': type(e).__name__
+        })
 
 
 if __name__ == "__main__":

@@ -13,7 +13,8 @@ from exceptions import (
     IntentClassificationError,
     LLMServiceError,
     LLMTimeoutError,
-    LLMAPIKeyError
+    LLMAPIKeyError,
+    ValidationError
 )
 from utils import LLMOperationLogger
 from templates import PromptLoader
@@ -95,7 +96,7 @@ class IntentClassificationService:
                     timeout=self.settings.llm.timeout
                 )
                 self.logger.info(f"LLM initialized: {self.settings.llm.model}")
-            except Exception as e:
+            except ValueError as e:
                 if "api_key" in str(e).lower():
                     raise LLMAPIKeyError()
                 else:
@@ -103,6 +104,12 @@ class IntentClassificationService:
                         operation="LLM initialization",
                         original_error=e
                     )
+            except Exception as e:
+                self.logger.error(f"Unexpected error during LLM initialization: {e}")
+                raise LLMServiceError(
+                    operation="LLM initialization",
+                    original_error=e
+                )
         return self.llm
     
     def _load_prompt_template(self) -> PromptTemplate:
@@ -114,8 +121,11 @@ class IntentClassificationService:
                 input_variables=["query"],
                 partial_variables={"format_instructions": self.parser.get_format_instructions()}
             )
-        except Exception as e:
+        except (FileNotFoundError, KeyError) as e:
             self.logger.error(f"Failed to load intent classification template: {e}")
+            # Fallback to basic template if file loading fails
+        except Exception as e:
+            self.logger.error(f"Unexpected error loading intent classification template: {e}")
             # Fallback to basic template if file loading fails
             fallback_template = """Classify the user query into one of the supported intents and return JSON.
 Query: {query}
@@ -142,10 +152,7 @@ Schema: {format_instructions}"""
             LLMServiceError: If LLM service fails
         """
         if not query or not query.strip():
-            raise IntentClassificationError(
-                query=query,
-                original_error=ValueError("Empty query")
-            )
+            raise ValidationError("query", query, "cannot be empty or whitespace only")
         
         self.logger.info(f"Classifying intent for query: '{query}'")
         
@@ -185,10 +192,26 @@ Schema: {format_instructions}"""
                 
                 return route_details
                 
+            except TimeoutError as e:
+                duration = time.time() - start_time
+                self.logger.error(f"Intent classification timed out after {duration:.3f}s for query: '{query}'")
+                raise LLMTimeoutError(
+                    timeout_seconds=self.settings.llm.timeout,
+                    operation="intent classification"
+                )
+            except ValueError as e:
+                if "api_key" in str(e).lower():
+                    raise LLMAPIKeyError()
+                else:
+                    raise IntentClassificationError(
+                        query=query,
+                        original_error=e
+                    )
             except Exception as e:
                 duration = time.time() - start_time
+                self.logger.error(f"Unexpected error during intent classification after {duration:.3f}s: {e}")
                 
-                # Check for timeout
+                # Check for timeout based on duration
                 if duration >= self.settings.llm.timeout:
                     raise LLMTimeoutError(
                         timeout_seconds=self.settings.llm.timeout,
@@ -205,9 +228,9 @@ Schema: {format_instructions}"""
             # Re-raise our custom exceptions
             raise
         except Exception as e:
-            self.logger.error(f"Unexpected error during intent classification: {e}")
+            self.logger.error(f"Unexpected error during intent classification for query '{query}': {e}")
             raise LLMServiceError(
-                operation="intent classification",
+                operation=f"intent classification for query '{query}'",
                 original_error=e
             )
     
@@ -245,17 +268,17 @@ Schema: {format_instructions}"""
         if intent == "find_n_largest_parcels":
             n = parameters.get("n")
             if not n or n <= 0:
-                raise ValueError("Parameter 'n' must be a positive integer")
+                raise ValidationError("n", n, "must be a positive integer")
         
         elif intent == "find_parcels_above_area":
             min_area = parameters.get("min_area")
             if min_area is None or min_area < 0:
-                raise ValueError("Parameter 'min_area' must be non-negative")
+                raise ValidationError("min_area", min_area, "must be non-negative")
         
         elif intent == "find_parcels_near_gpz":
             radius = parameters.get("radius_meters")
             if not radius or radius <= 0:
-                raise ValueError("Parameter 'radius_meters' must be positive")
+                raise ValidationError("radius_meters", radius, "must be positive")
         
         # Removed get_gis_data validation - no longer supported
         

@@ -67,3 +67,6 @@ DB_PASSWORD=your_db_password
 # LLM Service
 GROQ_API_KEY=your_groq_api_key
 ```
+## Code writing method
+- use KISS and DRY and YAGNI principles
+- try to keep structure simple

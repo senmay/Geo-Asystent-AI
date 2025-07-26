@@ -12,38 +12,12 @@ from exceptions import (
     SpatialQueryError
 )
 from utils.db_logger import log_database_operation
-
-
-def limit_results_for_display(gdf, max_display=5, item_type="działka"):
-    """
-    Limit results for chat display and add summary message.
-    
-    Args:
-        gdf: GeoDataFrame with results
-        max_display: Maximum number of items to show in chat
-        item_type: Type of item (działka, budynek, etc.)
-    
-    Returns:
-        Tuple of (limited_gdf, summary_message)
-    """
-    total_count = len(gdf)
-    
-    if total_count <= max_display:
-        return gdf, None
-    
-    # Limit to first max_display results
-    limited_gdf = gdf.head(max_display).copy()
-    
-    # Create summary message
-    remaining = total_count - max_display
-    if item_type == "działka":
-        summary = f"Wyświetlono {max_display} z {total_count} działek. Pozostałe {remaining} działek dostępne w PDF."
-    elif item_type == "budynek":
-        summary = f"Wyświetlono {max_display} z {total_count} budynków. Pozostałe {remaining} budynków dostępne w PDF."
-    else:
-        summary = f"Wyświetlono {max_display} z {total_count} wyników. Pozostałe {remaining} wyników dostępne w PDF."
-    
-    return limited_gdf, summary
+from utils.result_helpers import (
+    limit_results_for_display, 
+    add_simple_id_messages, 
+    create_parcel_message,
+    create_numbered_parcel_message
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +28,10 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
     reprojects it to WGS 84 (EPSG:4326), and returns it as a GeoJSON string.
     Recognizes layer names like 'parcels', 'buildings', 'parcels_low', 'buildings_low'.
     """
-    logger.info(f"Retrieving layer: '{layer_name}'")
+    logger.info(f"Starting get_layer_as_geojson operation", extra={
+        'operation': 'get_layer_as_geojson',
+        'layer_name': layer_name
+    })
 
     normalized_input = layer_name.lower().strip()
     base_layer_name = None
@@ -82,7 +59,11 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
     else:
         table_to_use = f"{base_layer_name}_low"
     
-    logger.debug(f"Querying table: '{table_to_use}'")
+    logger.debug(f"Querying table: '{table_to_use}'", extra={
+        'operation': 'get_layer_as_geojson',
+        'table_name': table_to_use,
+        'base_layer': base_layer_name
+    })
 
     try:
         sql = f'SELECT * FROM "{table_to_use}";'
@@ -101,7 +82,11 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
         if gdf.empty:
             raise LayerNotFoundError(layer_name=layer_name)
         
-        logger.info(f"Successfully read {len(gdf)} features from table '{table_to_use}'")
+        logger.info(f"Successfully read {len(gdf)} features from table '{table_to_use}'", extra={
+            'operation': 'get_layer_as_geojson',
+            'table_name': table_to_use,
+            'feature_count': len(gdf)
+        })
         
         try:
             gdf_reprojected = gdf.to_crs(epsg=4326)
@@ -109,7 +94,7 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
             
             # Add a message with the ID
             if id_column and id_column in gdf.columns:
-                gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
+                gdf_reprojected = add_simple_id_messages(gdf_reprojected, id_column)
             
             return gdf_reprojected.to_json()
             
@@ -140,7 +125,7 @@ def get_layer_as_geojson(layer_name: str, db_engine: Engine) -> str:
             gdf_reprojected['loaded_layer'] = table_to_use
             
             if id_column and id_column in gdf.columns:
-                gdf_reprojected['message'] = gdf_reprojected[id_column].apply(lambda x: f"ID: {x}")
+                gdf_reprojected = add_simple_id_messages(gdf_reprojected, id_column)
 
             return gdf_reprojected.to_json()
             
@@ -156,7 +141,9 @@ def find_largest_parcel(db_engine: Engine) -> str:
     Finds the single largest parcel by area and returns it as a GeoJSON string.
     The result also includes the parcel's ID and its area in square meters.
     """
-    logger.info("Finding largest parcel")
+    logger.info("Starting find_largest_parcel operation", extra={
+        'operation': 'find_largest_parcel'
+    })
     
     table_name = "parcels_low"
     
@@ -174,14 +161,18 @@ def find_largest_parcel(db_engine: Engine) -> str:
         if gdf.empty:
             raise LayerNotFoundError(layer_name="parcels", available_layers=["parcels_low", "parcels"])
             
-        logger.info(f"Found largest parcel with ID: {gdf.iloc[0].get('ID_DZIALKI', 'N/A')}")
+        parcel_id = gdf.iloc[0].get('ID_DZIALKI', 'N/A')
+        area_sqm = gdf.iloc[0]['area_sqm']
+        logger.info(f"Found largest parcel with ID: {parcel_id}", extra={
+            'operation': 'find_largest_parcel',
+            'parcel_id': parcel_id,
+            'area_sqm': area_sqm
+        })
         
         try:
             gdf_reprojected = gdf.to_crs(epsg=4326)
             parcel_id = gdf.iloc[0].get('ID_DZIALKI', 'Brak ID')
-            area_sqm = gdf.iloc[0]['area_sqm']
-            area_ha = area_sqm / 10000
-            gdf_reprojected['message'] = f"Największa działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha"
+            gdf_reprojected['message'] = create_parcel_message(parcel_id, area_sqm, "largest")
             
             return gdf_reprojected.to_json()
             
@@ -205,7 +196,10 @@ def find_n_largest_parcels(n: int, db_engine: Engine) -> str:
     Finds the N largest parcels by area and returns them as a GeoJSON string.
     The result also includes each parcel's ID and its area in square meters.
     """
-    print(f"Tool 'find_n_largest_parcels' called with n={n}.")
+    logger.info(f"Starting find_n_largest_parcels operation", extra={
+        'operation': 'find_n_largest_parcels',
+        'n': n
+    })
     
     table_name = "parcels_low"
     
@@ -221,7 +215,11 @@ def find_n_largest_parcels(n: int, db_engine: Engine) -> str:
         if gdf.empty:
             return f"Error: Could not find any parcels in the database."
             
-        print(f"Found {len(gdf)} largest parcels.")
+        logger.info(f"Found {len(gdf)} largest parcels", extra={
+            'operation': 'find_n_largest_parcels',
+            'n': n,
+            'found_count': len(gdf)
+        })
         
         gdf_reprojected = gdf.to_crs(epsg=4326)
         
@@ -232,8 +230,7 @@ def find_n_largest_parcels(n: int, db_engine: Engine) -> str:
         for index, row in limited_gdf.iterrows():
             parcel_id = row.get('ID_DZIALKI', 'Brak ID')
             area_sqm = row['area_sqm']
-            area_ha = area_sqm / 10000
-            messages.append(f"Działka nr {index + 1}. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+            messages.append(create_numbered_parcel_message(index + 1, parcel_id, area_sqm))
         
         # Add summary message if there are more results
         if summary:
@@ -251,7 +248,10 @@ def find_parcels_above_area(min_area: float, db_engine: Engine) -> str:
     Finds all parcels with an area greater than a specified minimum area and returns them as a GeoJSON string.
     The result also includes each parcel's ID and its area in square meters.
     """
-    print(f"Tool 'find_parcels_above_area' called with min_area={min_area}.")
+    logger.info(f"Starting find_parcels_above_area operation", extra={
+        'operation': 'find_parcels_above_area',
+        'min_area': min_area
+    })
     
     table_name = "parcels_low"
     
@@ -266,7 +266,11 @@ def find_parcels_above_area(min_area: float, db_engine: Engine) -> str:
         if gdf.empty:
             return f"Error: Could not find any parcels with an area greater than {min_area} m²."
             
-        print(f"Found {len(gdf)} parcels with area above {min_area} m².")
+        logger.info(f"Found {len(gdf)} parcels with area above {min_area} m²", extra={
+            'operation': 'find_parcels_above_area',
+            'min_area': min_area,
+            'found_count': len(gdf)
+        })
         
         gdf_reprojected = gdf.to_crs(epsg=4326)
         
@@ -277,8 +281,7 @@ def find_parcels_above_area(min_area: float, db_engine: Engine) -> str:
         for index, row in limited_gdf.iterrows():
             parcel_id = row.get('ID_DZIALKI', 'Brak ID')
             area_sqm = row['area_sqm']
-            area_ha = area_sqm / 10000
-            messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+            messages.append(create_parcel_message(parcel_id, area_sqm, "standard"))
         
         # Add summary message if there are more results
         if summary:
@@ -297,7 +300,10 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
     The result includes each parcel's ID and its area.
     The radius is specified in meters.
     """
-    print(f"Tool 'find_parcels_near_gpz' called with radius_meters={radius_meters}.")
+    logger.info(f"Starting find_parcels_near_gpz operation", extra={
+        'operation': 'find_parcels_near_gpz',
+        'radius_meters': radius_meters
+    })
 
     parcels_table = "parcels_low"
     gpz_table = "gpz_110kv"
@@ -319,10 +325,18 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
     try:
         gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
         if gdf.empty:
-            logger.info(f"No parcels found within {radius_meters}m of a GPZ, returning empty GeoJSON.")
+            logger.info(f"No parcels found within {radius_meters}m of a GPZ, returning empty GeoJSON.", extra={
+            'operation': 'find_parcels_near_gpz',
+            'radius_meters': radius_meters,
+            'found_count': 0
+        })
             return '{"type": "FeatureCollection", "features": []}'
 
-        logger.info(f"Found {len(gdf)} parcels within {radius_meters}m of a GPZ.")
+        logger.info(f"Found {len(gdf)} parcels within {radius_meters}m of a GPZ.", extra={
+            'operation': 'find_parcels_near_gpz',
+            'radius_meters': radius_meters,
+            'found_count': len(gdf)
+        })
 
         gdf_reprojected = gdf.to_crs(epsg=4326)
 
@@ -333,8 +347,7 @@ def find_parcels_near_gpz(radius_meters: int, db_engine: Engine) -> str:
         for index, row in limited_gdf.iterrows():
             parcel_id = row.get('ID_DZIALKI', 'Brak ID')
             area_sqm = row['area_sqm']
-            area_ha = area_sqm / 10000
-            messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+            messages.append(create_parcel_message(parcel_id, area_sqm, "standard"))
 
         # Add summary message if there are more results
         if summary:
@@ -357,7 +370,9 @@ def find_parcels_without_buildings(db_engine: Engine) -> str:
     Uses spatial intersection to identify parcels without buildings.
     Returns parcels as GeoJSON with their ID and area information.
     """
-    logger.info("Finding parcels without buildings")
+    logger.info("Starting find_parcels_without_buildings operation", extra={
+        'operation': 'find_parcels_without_buildings'
+    })
     
     parcels_table = "parcels_low"
     buildings_table = "buildings_low"
@@ -378,10 +393,16 @@ def find_parcels_without_buildings(db_engine: Engine) -> str:
             gdf = gpd.read_postgis(sql, db_engine, geom_col='geometry')
             
         if gdf.empty:
-            logger.info("No parcels without buildings found, returning empty GeoJSON.")
+            logger.info("No parcels without buildings found, returning empty GeoJSON.", extra={
+            'operation': 'find_parcels_without_buildings',
+            'found_count': 0
+        })
             return '{"type": "FeatureCollection", "features": []}'
             
-        logger.info(f"Found {len(gdf)} parcels without buildings")
+        logger.info(f"Found {len(gdf)} parcels without buildings", extra={
+            'operation': 'find_parcels_without_buildings',
+            'found_count': len(gdf)
+        })
         
         try:
             gdf_reprojected = gdf.to_crs(epsg=4326)
@@ -393,8 +414,7 @@ def find_parcels_without_buildings(db_engine: Engine) -> str:
             for index, row in limited_gdf.iterrows():
                 parcel_id = row.get('ID_DZIALKI', 'Brak ID')
                 area_sqm = row['area_sqm']
-                area_ha = area_sqm / 10000
-                messages.append(f"Niezabudowana działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+                messages.append(create_parcel_message(parcel_id, area_sqm, "unbuilt"))
             
             # Add summary message if there are more results
             if summary:
@@ -435,7 +455,10 @@ def export_results_to_pdf(geojson_data: str, report_title: str = "Raport GIS") -
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     
-    logger.info(f"Exporting results to PDF: {report_title}")
+    logger.info(f"Starting export_results_to_pdf operation", extra={
+        'operation': 'export_results_to_pdf',
+        'report_title': report_title
+    })
     
     try:
         # Parse GeoJSON data
@@ -443,7 +466,11 @@ def export_results_to_pdf(geojson_data: str, report_title: str = "Raport GIS") -
         features = geojson.get('features', [])
         
         if not features:
-            logger.warning("No features found in GeoJSON data for PDF export")
+            logger.warning("No features found in GeoJSON data for PDF export", extra={
+            'operation': 'export_results_to_pdf',
+            'report_title': report_title,
+            'feature_count': 0
+        })
             return "Brak danych do eksportu - nie znaleziono żadnych obiektów."
         
         # Create temporary PDF file
@@ -536,12 +563,25 @@ def export_results_to_pdf(geojson_data: str, report_title: str = "Raport GIS") -
         # Build PDF
         doc.build(story)
         
-        logger.info(f"PDF report generated successfully: {pdf_path}")
+        logger.info(f"PDF report generated successfully: {pdf_path}", extra={
+            'operation': 'export_results_to_pdf',
+            'report_title': report_title,
+            'pdf_path': pdf_path,
+            'feature_count': len(features)
+        })
         return f"Raport PDF został wygenerowany pomyślnie. Zawiera {len(features)} obiektów. Plik zapisany jako: {pdf_path}"
         
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid GeoJSON data for PDF export: {e}")
+        logger.error(f"Invalid GeoJSON data for PDF export: {e}", extra={
+            'operation': 'export_results_to_pdf',
+            'report_title': report_title,
+            'error_type': 'JSONDecodeError'
+        })
         return "Błąd: Nieprawidłowe dane GeoJSON do eksportu."
     except Exception as e:
-        logger.error(f"Error generating PDF report: {e}")
+        logger.error(f"Error generating PDF report: {e}", extra={
+            'operation': 'export_results_to_pdf',
+            'report_title': report_title,
+            'error_type': type(e).__name__
+        })
         return f"Błąd podczas generowania raportu PDF: {str(e)}"

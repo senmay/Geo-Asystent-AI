@@ -98,3 +98,21 @@ class SpatialQueryError(GeoAsystentException):
             details=details,
             user_message=f"Błąd podczas wykonywania zapytania przestrzennego ({query_type}). Sprawdź parametry i spróbuj ponownie."
         )
+
+
+class ValidationError(GeoAsystentException):
+    """Raised when input validation fails."""
+    
+    def __init__(self, parameter: str, value: Any, reason: str):
+        details = {
+            "parameter": parameter,
+            "value": str(value),
+            "reason": reason
+        }
+        
+        super().__init__(
+            message=f"Validation failed for parameter '{parameter}': {reason}",
+            code=ErrorCode.VALIDATION_ERROR,
+            details=details,
+            user_message=f"Nieprawidłowa wartość parametru '{parameter}': {reason}"
+        )

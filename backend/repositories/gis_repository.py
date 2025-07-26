@@ -16,6 +16,7 @@ from exceptions import (
     SpatialQueryError
 )
 from utils.db_logger import log_database_operation
+from utils.result_helpers import create_parcel_message, create_numbered_parcel_message
 
 
 @dataclass
@@ -212,14 +213,13 @@ class GISRepository(BaseRepository):
             for idx, row in gdf.iterrows():
                 parcel_id = row.get(layer_config.id_column, 'Brak ID')
                 area_sqm = row.get('area_sqm', 0)
-                area_ha = area_sqm / 10000
                 
                 if criteria.limit == 1:
-                    messages.append(f"Największa działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+                    messages.append(create_parcel_message(parcel_id, area_sqm, "largest"))
                 elif criteria.limit and criteria.limit > 1:
-                    messages.append(f"Działka nr {len(messages) + 1}. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+                    messages.append(create_numbered_parcel_message(len(messages) + 1, parcel_id, area_sqm))
                 else:
-                    messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+                    messages.append(create_parcel_message(parcel_id, area_sqm, "standard"))
             
             gdf['message'] = messages
             
@@ -284,8 +284,7 @@ class GISRepository(BaseRepository):
             for _, row in gdf.iterrows():
                 parcel_id = row.get(parcels_config.id_column, 'Brak ID')
                 area_sqm = row.get('area_sqm', 0)
-                area_ha = area_sqm / 10000
-                messages.append(f"ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
+                messages.append(create_parcel_message(parcel_id, area_sqm, "standard"))
             
             gdf['message'] = messages
             

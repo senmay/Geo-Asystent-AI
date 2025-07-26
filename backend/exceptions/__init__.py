@@ -6,7 +6,8 @@ from .gis import (
     InvalidLayerNameError,
     GISDataProcessingError,
     DatabaseConnectionError,
-    SpatialQueryError
+    SpatialQueryError,
+    ValidationError
 )
 from .llm import (
     LLMServiceError,
@@ -26,6 +27,7 @@ __all__ = [
     "GISDataProcessingError",
     "DatabaseConnectionError",
     "SpatialQueryError",
+    "ValidationError",
     
     # LLM exceptions
     "LLMServiceError",

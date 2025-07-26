@@ -8,6 +8,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass
 from sqlalchemy.engine import Engine
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
+from exceptions import DatabaseConnectionError, GISDataProcessingError
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +99,11 @@ class LayerConfigService:
             self._load_from_database()
             self._cache_loaded = True
             self.logger.info(f"Loaded {len(self._cache)} layer configurations")
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error loading layer configurations: {e}")
+            self._load_fallback_config()
         except Exception as e:
-            self.logger.error(f"Failed to load layer configurations: {e}")
+            self.logger.error(f"Unexpected error loading layer configurations: {e}")
             self._load_fallback_config()
     
     def _load_from_database(self):
@@ -253,6 +259,9 @@ class LayerConfigService:
             self.logger.info(f"Added/updated layer configuration: {config.layer_name}")
             return True
             
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error adding layer configuration for {config.layer_name}: {e}")
+            return False
         except Exception as e:
-            self.logger.error(f"Failed to add layer configuration: {e}")
+            self.logger.error(f"Unexpected error adding layer configuration for {config.layer_name}: {e}")
             return False

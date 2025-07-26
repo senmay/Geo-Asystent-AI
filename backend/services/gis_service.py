@@ -8,40 +8,18 @@ from sqlalchemy.engine import Engine
 
 from repositories import GISRepository
 from models.domain import ParcelCriteria, QueryResult, GISOperationResult
-from exceptions import GeoAsystentException, GISDataProcessingError, SpatialQueryError
+from exceptions import (
+    GeoAsystentException, 
+    GISDataProcessingError, 
+    SpatialQueryError,
+    DatabaseConnectionError,
+    LayerNotFoundError,
+    InvalidLayerNameError,
+    ValidationError
+)
 from utils.db_logger import log_gis_operation
-
-
-def limit_results_for_display(gdf, max_display=5, item_type="działka"):
-    """
-    Limit results for chat display and add summary message.
-    
-    Args:
-        gdf: GeoDataFrame with results
-        max_display: Maximum number of items to show in chat
-        item_type: Type of item (działka, budynek, etc.)
-    
-    Returns:
-        Tuple of (limited_gdf, summary_message)
-    """
-    total_count = len(gdf)
-    
-    if total_count <= max_display:
-        return gdf, None
-    
-    # Limit to first max_display results
-    limited_gdf = gdf.head(max_display).copy()
-    
-    # Create summary message
-    remaining = total_count - max_display
-    if item_type == "działka":
-        summary = f"Wyświetlono {max_display} z {total_count} działek. Pozostałe {remaining} działek dostępne w PDF."
-    elif item_type == "budynek":
-        summary = f"Wyświetlono {max_display} z {total_count} budynków. Pozostałe {remaining} budynków dostępne w PDF."
-    else:
-        summary = f"Wyświetlono {max_display} z {total_count} wyników. Pozostałe {remaining} wyników dostępne w PDF."
-    
-    return limited_gdf, summary
+from utils.result_helpers import limit_results_for_display, add_simple_id_messages, add_parcel_messages, convert_to_geojson
+from utils.validation_helpers import validate_positive_integer, validate_non_negative_number, validate_area_thresholds
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +36,192 @@ class GISService:
         """
         self.repository = GISRepository(db_engine)
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+    
+    def _process_parcel_results(self, gdf: gpd.GeoDataFrame, operation_type: str = "standard") -> gpd.GeoDataFrame:
+        """
+        Process parcel results with messages and display limiting.
+        
+        Args:
+            gdf: Raw parcel GeoDataFrame
+            operation_type: Type of operation for message formatting
+            
+        Returns:
+            Processed GeoDataFrame with messages
+        """
+        if gdf.empty:
+            return gdf
+        
+        # Add appropriate messages based on operation type
+        if operation_type == "unbuilt":
+            gdf_with_messages = add_parcel_messages(gdf, message_type="unbuilt")
+        elif operation_type == "largest":
+            gdf_with_messages = add_parcel_messages(gdf, message_type="largest")
+        elif operation_type == "numbered":
+            gdf_with_messages = add_parcel_messages(gdf, message_type="numbered")
+        else:
+            gdf_with_messages = add_parcel_messages(gdf, message_type="standard")
+        
+        # Limit results for display if more than 5
+        if len(gdf_with_messages) > 5:
+            limited_gdf, summary = limit_results_for_display(gdf_with_messages, max_display=5, item_type="działka")
+            
+            # Add summary to the last message
+            if summary and 'message' in limited_gdf.columns:
+                messages = limited_gdf['message'].tolist()
+                if messages:
+                    messages[-1] = f"{messages[-1]}\n\n{summary}"
+                    limited_gdf['message'] = messages
+            
+            return limited_gdf
+        
+        return gdf_with_messages
+    
+    def _get_parcels_by_criteria(self, criteria: ParcelCriteria) -> gpd.GeoDataFrame:
+        """
+        Get parcels by criteria and handle common error cases.
+        
+        Args:
+            criteria: Parcel search criteria
+            
+        Returns:
+            GeoDataFrame with parcel results
+        """
+        try:
+            return self.repository.find_parcels_by_criteria(criteria)
+        except (LayerNotFoundError, InvalidLayerNameError, SpatialQueryError, DatabaseConnectionError):
+            # Re-raise specific GIS exceptions
+            raise
+        except Exception as e:
+            self.logger.error(f"Failed to retrieve parcels with criteria {criteria.__dict__}: {e}")
+            raise GISDataProcessingError(
+                operation=f"retrieving parcels with criteria {criteria.__dict__}",
+                original_error=e
+            )
+    
+    def _get_parcels_near_points(self, layer_name: str, radius_meters: float) -> gpd.GeoDataFrame:
+        """
+        Get parcels near points from specified layer.
+        
+        Args:
+            layer_name: Name of the point layer
+            radius_meters: Search radius in meters
+            
+        Returns:
+            GeoDataFrame with parcel results
+        """
+        try:
+            return self.repository.find_parcels_near_point(layer_name, radius_meters)
+        except (LayerNotFoundError, InvalidLayerNameError, SpatialQueryError, DatabaseConnectionError):
+            # Re-raise specific GIS exceptions
+            raise
+        except Exception as e:
+            self.logger.error(f"Failed to find parcels near {layer_name} within {radius_meters}m: {e}")
+            raise GISDataProcessingError(
+                operation=f"finding parcels near {layer_name} within {radius_meters}m",
+                original_error=e
+            )
+    
+    def _get_parcels_without_buildings(self) -> gpd.GeoDataFrame:
+        """
+        Get parcels that do not contain buildings.
+        
+        Returns:
+            GeoDataFrame with parcel results
+        """
+        try:
+            return self.repository.find_parcels_without_buildings()
+        except (LayerNotFoundError, InvalidLayerNameError, SpatialQueryError, DatabaseConnectionError):
+            # Re-raise specific GIS exceptions
+            raise
+        except Exception as e:
+            self.logger.error(f"Failed to find parcels without buildings: {e}")
+            raise SpatialQueryError(
+                query_type="finding parcels without buildings",
+                parameters={},
+                original_error=e
+            )
+    
+    def _get_parcel_data_with_area(self) -> gpd.GeoDataFrame:
+        """
+        Get parcel data and ensure area column exists.
+        
+        Returns:
+            GeoDataFrame with area_sqm column
+        """
+        gdf = self.repository.get_layer_data("dzialki")
+        
+        # Calculate area if not present
+        if not gdf.empty and 'area_sqm' not in gdf.columns:
+            gdf['area_sqm'] = gdf.geometry.area
+        
+        return gdf
+    
+    def _calculate_area_distribution(self, gdf: gpd.GeoDataFrame, thresholds: List[float]) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate area distribution for given thresholds.
+        
+        Args:
+            gdf: GeoDataFrame with area_sqm column
+            thresholds: List of area thresholds
+            
+        Returns:
+            Dictionary with distribution data
+        """
+        distribution = {}
+        total_parcels = len(gdf)
+        
+        for i, threshold in enumerate(thresholds):
+            if i == 0:
+                # First range: 0 to threshold
+                count = len(gdf[gdf['area_sqm'] <= threshold])
+                range_name = f"0-{threshold} m²"
+            else:
+                # Subsequent ranges: previous threshold to current threshold
+                prev_threshold = thresholds[i-1]
+                count = len(gdf[(gdf['area_sqm'] > prev_threshold) & (gdf['area_sqm'] <= threshold)])
+                range_name = f"{prev_threshold}-{threshold} m²"
+            
+            percentage = (count / total_parcels) * 100 if total_parcels > 0 else 0
+            distribution[range_name] = {
+                "count": count,
+                "percentage": round(percentage, 2)
+            }
+        
+        # Add range for parcels above the highest threshold
+        if thresholds:
+            highest_threshold = max(thresholds)
+            count = len(gdf[gdf['area_sqm'] > highest_threshold])
+            percentage = (count / total_parcels) * 100 if total_parcels > 0 else 0
+            distribution[f">{highest_threshold} m²"] = {
+                "count": count,
+                "percentage": round(percentage, 2)
+            }
+        
+        return distribution
+    
+    def _calculate_parcel_area_statistics(self, layer_name: str) -> Dict[str, Any]:
+        """
+        Calculate area statistics for parcel layers.
+        
+        Args:
+            layer_name: Name of the parcel layer
+            
+        Returns:
+            Dictionary with area statistics
+        """
+        gdf = self.repository.get_layer_data(layer_name)
+        
+        if gdf.empty or 'area_sqm' not in gdf.columns:
+            return {}
+        
+        return {
+            "total_parcels": len(gdf),
+            "total_area_sqm": float(gdf['area_sqm'].sum()),
+            "average_area_sqm": float(gdf['area_sqm'].mean()),
+            "min_area_sqm": float(gdf['area_sqm'].min()),
+            "max_area_sqm": float(gdf['area_sqm'].max()),
+            "median_area_sqm": float(gdf['area_sqm'].median())
+        }
     
     @log_gis_operation("layer_retrieval")
     def get_layer_as_geojson(self, layer_name: str) -> str:
@@ -76,20 +240,16 @@ class GISService:
         self.logger.info(f"Retrieving layer as GeoJSON: {layer_name}")
         
         try:
+            # Business logic
             gdf = self.repository.get_layer_data(layer_name)
-            
-            # Reproject to WGS84 for web display
-            gdf_reprojected = gdf.to_crs(epsg=4326)
             
             # Add ID messages if ID column exists
             layer_config = self.repository.get_layer_config(layer_name)
-            if layer_config.id_column in gdf_reprojected.columns:
-                gdf_reprojected['message'] = gdf_reprojected[layer_config.id_column].apply(
-                    lambda x: f"ID: {x}"
-                )
+            if layer_config.id_column in gdf.columns:
+                gdf = add_simple_id_messages(gdf, layer_config.id_column)
             
-            self.logger.info(f"Successfully converted {len(gdf_reprojected)} features to GeoJSON")
-            return gdf_reprojected.to_json()
+            self.logger.info(f"Successfully converted {len(gdf)} features to GeoJSON")
+            return convert_to_geojson(gdf)
             
         except GeoAsystentException:
             raise
@@ -110,19 +270,15 @@ class GISService:
         """
         self.logger.info("Finding largest parcel")
         
-        try:
-            criteria = ParcelCriteria(limit=1, order_by="area_sqm DESC")
-            gdf = self.repository.find_parcels_by_criteria(criteria)
-            
-            # Reproject to WGS84
-            gdf_reprojected = gdf.to_crs(epsg=4326)
-            
-            self.logger.info(f"Found largest parcel with {len(gdf_reprojected)} result")
-            return gdf_reprojected.to_json()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to find largest parcel: {e}")
-            raise
+        # Business logic
+        criteria = ParcelCriteria(limit=1, order_by="area_sqm DESC")
+        gdf = self._get_parcels_by_criteria(criteria)
+        
+        # Result processing
+        processed_gdf = self._process_parcel_results(gdf, operation_type="largest")
+        
+        self.logger.info(f"Found largest parcel with {len(gdf)} result")
+        return convert_to_geojson(processed_gdf)
     
     @log_gis_operation("n_largest_parcels_search")
     def find_n_largest_parcels(self, n: int) -> str:
@@ -135,39 +291,20 @@ class GISService:
         Returns:
             GeoJSON string with N largest parcels
         """
-        if n <= 0:
-            raise ValueError("n must be positive")
+        # Input validation
+        validate_positive_integer(n, "n")
         
         self.logger.info(f"Finding {n} largest parcels")
         
-        try:
-            criteria = ParcelCriteria(limit=n, order_by="area_sqm DESC")
-            gdf = self.repository.find_parcels_by_criteria(criteria)
-            
-            # Reproject to WGS84
-            gdf_reprojected = gdf.to_crs(epsg=4326)
-            
-            # Limit results for display if more than 5
-            if len(gdf_reprojected) > 5:
-                limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
-                
-                # Add summary message as a property of the last feature
-                if summary and 'message' in limited_gdf.columns:
-                    messages = limited_gdf['message'].tolist()
-                    # Add summary to the last message instead of as a separate item
-                    if messages:
-                        messages[-1] = f"{messages[-1]}\n\n{summary}"
-                        limited_gdf['message'] = messages
-                
-                self.logger.info(f"Found {len(gdf_reprojected)} largest parcels, showing {len(limited_gdf)}")
-                return limited_gdf.to_json()
-            
-            self.logger.info(f"Found {len(gdf_reprojected)} largest parcels")
-            return gdf_reprojected.to_json()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to find {n} largest parcels: {e}")
-            raise
+        # Business logic
+        criteria = ParcelCriteria(limit=n, order_by="area_sqm DESC")
+        gdf = self._get_parcels_by_criteria(criteria)
+        
+        # Result processing
+        processed_gdf = self._process_parcel_results(gdf, operation_type="numbered")
+        
+        self.logger.info(f"Found {len(gdf)} largest parcels")
+        return convert_to_geojson(processed_gdf)
     
     @log_gis_operation("area_based_parcel_search")
     def find_parcels_above_area(self, min_area: float) -> str:
@@ -180,39 +317,20 @@ class GISService:
         Returns:
             GeoJSON string with matching parcels
         """
-        if min_area < 0:
-            raise ValueError("min_area must be non-negative")
+        # Input validation
+        validate_non_negative_number(min_area, "min_area")
         
         self.logger.info(f"Finding parcels above {min_area} m²")
         
-        try:
-            criteria = ParcelCriteria(min_area=min_area, order_by="area_sqm DESC")
-            gdf = self.repository.find_parcels_by_criteria(criteria)
-            
-            # Reproject to WGS84
-            gdf_reprojected = gdf.to_crs(epsg=4326)
-            
-            # Limit results for display if more than 5
-            if len(gdf_reprojected) > 5:
-                limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
-                
-                # Add summary message as a property of the last feature
-                if summary and 'message' in limited_gdf.columns:
-                    messages = limited_gdf['message'].tolist()
-                    # Add summary to the last message instead of as a separate item
-                    if messages:
-                        messages[-1] = f"{messages[-1]}\n\n{summary}"
-                        limited_gdf['message'] = messages
-                
-                self.logger.info(f"Found {len(gdf_reprojected)} parcels above {min_area} m², showing {len(limited_gdf)}")
-                return limited_gdf.to_json()
-            
-            self.logger.info(f"Found {len(gdf_reprojected)} parcels above {min_area} m²")
-            return gdf_reprojected.to_json()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to find parcels above {min_area} m²: {e}")
-            raise
+        # Business logic
+        criteria = ParcelCriteria(min_area=min_area, order_by="area_sqm DESC")
+        gdf = self._get_parcels_by_criteria(criteria)
+        
+        # Result processing
+        processed_gdf = self._process_parcel_results(gdf)
+        
+        self.logger.info(f"Found {len(gdf)} parcels above {min_area} m²")
+        return convert_to_geojson(processed_gdf)
     
     @log_gis_operation("proximity_search")
     def find_parcels_near_gpz(self, radius_meters: int) -> str:
@@ -225,43 +343,23 @@ class GISService:
         Returns:
             GeoJSON string with parcels near GPZ
         """
-        if radius_meters <= 0:
-            raise ValueError("radius_meters must be positive")
+        # Input validation
+        validate_positive_integer(radius_meters, "radius_meters")
         
         self.logger.info(f"Finding parcels within {radius_meters}m of GPZ points")
         
-        try:
-            gdf = self.repository.find_parcels_near_point("gpz_110kv", float(radius_meters))
-            
-            if gdf.empty:
-                self.logger.info(f"No parcels found within {radius_meters}m of GPZ")
-                # Return empty FeatureCollection
-                return '{"type": "FeatureCollection", "features": []}'
-            
-            # Reproject to WGS84
-            gdf_reprojected = gdf.to_crs(epsg=4326)
-            
-            # Limit results for display if more than 5
-            if len(gdf_reprojected) > 5:
-                limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
-                
-                # Add summary message as a property of the last feature
-                if summary and 'message' in limited_gdf.columns:
-                    messages = limited_gdf['message'].tolist()
-                    # Add summary to the last message instead of as a separate item
-                    if messages:
-                        messages[-1] = f"{messages[-1]}\n\n{summary}"
-                        limited_gdf['message'] = messages
-                
-                self.logger.info(f"Found {len(gdf_reprojected)} parcels within {radius_meters}m of GPZ, showing {len(limited_gdf)}")
-                return limited_gdf.to_json()
-            
-            self.logger.info(f"Found {len(gdf_reprojected)} parcels within {radius_meters}m of GPZ")
-            return gdf_reprojected.to_json()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to find parcels near GPZ: {e}")
-            raise
+        # Business logic
+        gdf = self._get_parcels_near_points("gpz_110kv", float(radius_meters))
+        
+        if gdf.empty:
+            self.logger.info(f"No parcels found within {radius_meters}m of GPZ")
+            return convert_to_geojson(gdf)
+        
+        # Result processing
+        processed_gdf = self._process_parcel_results(gdf)
+        
+        self.logger.info(f"Found {len(gdf)} parcels within {radius_meters}m of GPZ")
+        return convert_to_geojson(processed_gdf)
     
     @log_gis_operation("parcels_without_buildings_search")
     def find_parcels_without_buildings(self) -> str:
@@ -273,43 +371,18 @@ class GISService:
         """
         self.logger.info("Finding parcels without buildings")
         
-        try:
-            gdf = self.repository.find_parcels_without_buildings()
-            
-            if gdf.empty:
-                self.logger.info("No parcels without buildings found")
-                # Return empty FeatureCollection
-                return '{"type": "FeatureCollection", "features": []}'
-            
-            # Reproject to WGS84
-            gdf_reprojected = gdf.to_crs(epsg=4326)
-            
-            # Limit results for display
-            limited_gdf, summary = limit_results_for_display(gdf_reprojected, max_display=5, item_type="działka")
-            
-            # Add descriptive messages
-            messages = []
-            for _, row in limited_gdf.iterrows():
-                parcel_id = row.get('ID_DZIALKI', 'Brak ID')
-                area_sqm = row.get('area_sqm', 0)
-                area_ha = area_sqm / 10000 if area_sqm else 0
-                messages.append(f"Niezabudowana działka. ID: {parcel_id}, Powierzchnia: {area_ha:.4f} ha")
-            
-            # Add summary message to the last message instead of as a separate item
-            if summary and messages:
-                messages[-1] = f"{messages[-1]}\n\n{summary}"
-            
-            limited_gdf['message'] = messages
-            
-            self.logger.info(f"Found {len(gdf_reprojected)} parcels without buildings, showing {len(limited_gdf)}")
-            return limited_gdf.to_json()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to find parcels without buildings: {e}")
-            raise SpatialQueryError(
-                operation="finding parcels without buildings",
-                original_error=e
-            )
+        # Business logic
+        gdf = self._get_parcels_without_buildings()
+        
+        if gdf.empty:
+            self.logger.info("No parcels without buildings found")
+            return convert_to_geojson(gdf)
+        
+        # Result processing
+        processed_gdf = self._process_parcel_results(gdf, operation_type="unbuilt")
+        
+        self.logger.info(f"Found {len(gdf)} parcels without buildings")
+        return convert_to_geojson(processed_gdf)
     
     def get_layer_info(self, layer_name: str) -> Dict[str, Any]:
         """
@@ -336,11 +409,15 @@ class GISService:
                 "bounds": bounds
             }
             
-        except GeoAsystentException:
+        except (LayerNotFoundError, InvalidLayerNameError, DatabaseConnectionError):
+            # Re-raise specific GIS exceptions
             raise
         except Exception as e:
-            logger.error(f"Failed to get layer info: {layer_name} - {e}")
-            raise
+            logger.error(f"Failed to get layer info for {layer_name}: {e}")
+            raise GISDataProcessingError(
+                operation=f"getting layer info for {layer_name}",
+                original_error=e
+            )
     
     def get_available_layers(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -354,8 +431,11 @@ class GISService:
         for layer_name in self.repository.layers.keys():
             try:
                 layers_info[layer_name] = self.get_layer_info(layer_name)
+            except (LayerNotFoundError, InvalidLayerNameError, DatabaseConnectionError, GISDataProcessingError) as e:
+                logger.warning(f"Failed to get info for layer {layer_name}: {e.message}")
+                continue
             except Exception as e:
-                logger.warning(f"Failed to get info for layer {layer_name}: {e}")
+                logger.warning(f"Unexpected error getting info for layer {layer_name}: {e}")
                 continue
         
         return layers_info
@@ -374,30 +454,20 @@ class GISService:
         self.logger.info(f"Getting statistics for layer: {layer_name}")
         
         try:
-            layer_config = self.repository.get_layer_config(layer_name)
-            
             # Get basic layer info
             layer_info = self.get_layer_info(layer_name)
             
-            # For parcels, get area statistics
+            # Add specific statistics for parcels
             if layer_name in ["dzialki", "działki"]:
-                # Get some sample data to calculate statistics
-                gdf = self.repository.get_layer_data(layer_name)
-                
-                if not gdf.empty and 'area_sqm' in gdf.columns:
-                    area_stats = {
-                        "total_parcels": len(gdf),
-                        "total_area_sqm": float(gdf['area_sqm'].sum()),
-                        "average_area_sqm": float(gdf['area_sqm'].mean()),
-                        "min_area_sqm": float(gdf['area_sqm'].min()),
-                        "max_area_sqm": float(gdf['area_sqm'].max()),
-                        "median_area_sqm": float(gdf['area_sqm'].median())
-                    }
-                    layer_info.update(area_stats)
+                area_stats = self._calculate_parcel_area_statistics(layer_name)
+                layer_info.update(area_stats)
             
             self.logger.info(f"Successfully calculated statistics for {layer_name}")
             return layer_info
             
+        except (LayerNotFoundError, InvalidLayerNameError, DatabaseConnectionError, GISDataProcessingError):
+            # Re-raise specific GIS exceptions
+            raise
         except Exception as e:
             self.logger.error(f"Failed to get statistics for layer {layer_name}: {e}")
             raise GISDataProcessingError(
@@ -416,66 +486,40 @@ class GISService:
         Returns:
             Dictionary with distribution analysis
         """
+        # Input validation and defaults
         if area_thresholds is None:
             area_thresholds = [100, 500, 1000, 5000, 10000]  # Default thresholds
+        else:
+            validate_area_thresholds(area_thresholds)
         
         self.logger.info(f"Analyzing parcel distribution with thresholds: {area_thresholds}")
         
         try:
-            # Get parcel data
-            gdf = self.repository.get_layer_data("dzialki")
+            # Business logic
+            gdf = self._get_parcel_data_with_area()
             
             if gdf.empty:
                 return {"error": "No parcel data available"}
             
-            # Calculate area if not present
-            if 'area_sqm' not in gdf.columns:
-                gdf['area_sqm'] = gdf.geometry.area
-            
-            # Analyze distribution
-            distribution = {}
-            total_parcels = len(gdf)
-            
-            for i, threshold in enumerate(area_thresholds):
-                if i == 0:
-                    # First range: 0 to threshold
-                    count = len(gdf[gdf['area_sqm'] <= threshold])
-                    range_name = f"0-{threshold} m²"
-                else:
-                    # Subsequent ranges: previous threshold to current threshold
-                    prev_threshold = area_thresholds[i-1]
-                    count = len(gdf[(gdf['area_sqm'] > prev_threshold) & (gdf['area_sqm'] <= threshold)])
-                    range_name = f"{prev_threshold}-{threshold} m²"
-                
-                percentage = (count / total_parcels) * 100 if total_parcels > 0 else 0
-                distribution[range_name] = {
-                    "count": count,
-                    "percentage": round(percentage, 2)
-                }
-            
-            # Add range for parcels above the highest threshold
-            if area_thresholds:
-                highest_threshold = max(area_thresholds)
-                count = len(gdf[gdf['area_sqm'] > highest_threshold])
-                percentage = (count / total_parcels) * 100 if total_parcels > 0 else 0
-                distribution[f">{highest_threshold} m²"] = {
-                    "count": count,
-                    "percentage": round(percentage, 2)
-                }
+            # Analysis processing
+            distribution = self._calculate_area_distribution(gdf, area_thresholds)
             
             result = {
-                "total_parcels": total_parcels,
+                "total_parcels": len(gdf),
                 "distribution": distribution,
                 "thresholds_used": area_thresholds
             }
             
-            self.logger.info(f"Successfully analyzed distribution of {total_parcels} parcels")
+            self.logger.info(f"Successfully analyzed distribution of {len(gdf)} parcels")
             return result
             
+        except (LayerNotFoundError, InvalidLayerNameError, DatabaseConnectionError, GISDataProcessingError, ValidationError):
+            # Re-raise specific exceptions
+            raise
         except Exception as e:
-            self.logger.error(f"Failed to analyze parcel distribution: {e}")
+            self.logger.error(f"Failed to analyze parcel distribution with thresholds {area_thresholds}: {e}")
             raise GISDataProcessingError(
-                operation="analyzing parcel distribution",
+                operation=f"analyzing parcel distribution with thresholds {area_thresholds}",
                 original_error=e
             )
     
@@ -546,6 +590,9 @@ class GISService:
             self.logger.info(f"Validation completed for {layer_name}: {'PASSED' if validation_results['is_valid'] else 'FAILED'}")
             return validation_results
             
+        except (LayerNotFoundError, InvalidLayerNameError, DatabaseConnectionError, GISDataProcessingError):
+            # Re-raise specific GIS exceptions
+            raise
         except Exception as e:
             self.logger.error(f"Failed to validate layer {layer_name}: {e}")
             raise GISDataProcessingError(
