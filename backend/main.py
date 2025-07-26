@@ -28,7 +28,11 @@ setup_exception_handlers(app)
 # CORS Configuration using centralized settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.api.cors_origins,
+    allow_origins=[
+        "https://geoai.mapiarz.pl",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
