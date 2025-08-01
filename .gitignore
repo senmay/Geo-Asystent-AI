@@ -19,3 +19,5 @@ GEMINI.md
 .env.local
 gemcontact.txt
 wyjasnienie_systemu_llm.txt
+venv/
+.kiro/
