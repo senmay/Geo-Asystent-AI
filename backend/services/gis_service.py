@@ -39,14 +39,14 @@ class GISService:
     
     def _process_parcel_results(self, gdf: gpd.GeoDataFrame, operation_type: str = "standard") -> gpd.GeoDataFrame:
         """
-        Process parcel results with messages and display limiting.
+        Process parcel results with messages for chat display.
         
         Args:
             gdf: Raw parcel GeoDataFrame
             operation_type: Type of operation for message formatting
             
         Returns:
-            Processed GeoDataFrame with messages
+            Processed GeoDataFrame with all geometries but limited chat messages
         """
         if gdf.empty:
             return gdf
@@ -61,18 +61,25 @@ class GISService:
         else:
             gdf_with_messages = add_parcel_messages(gdf, message_type="standard")
         
-        # Limit results for display if more than 5
+        # For chat display: limit messages to 5 but keep all geometries for map
         if len(gdf_with_messages) > 5:
-            limited_gdf, summary = limit_results_for_display(gdf_with_messages, max_display=5, item_type="działka")
+            # Create messages for first 5 items only
+            limited_messages = gdf_with_messages['message'].head(5).tolist()
             
-            # Add summary to the last message
-            if summary and 'message' in limited_gdf.columns:
-                messages = limited_gdf['message'].tolist()
-                if messages:
-                    messages[-1] = f"{messages[-1]}\n\n{summary}"
-                    limited_gdf['message'] = messages
+            # Add summary message to the last displayed item
+            total_count = len(gdf_with_messages)
+            remaining = total_count - 5
+            summary = f"Na czacie wyświetlono informacje o 5 z {total_count} działek. Na mapie widoczne są wszystkie {total_count} działek. Szczegółowe informacje o pozostałych {remaining} działkach dostępne w PDF."
             
-            return limited_gdf
+            if limited_messages:
+                limited_messages[-1] = f"{limited_messages[-1]}\n\n{summary}"
+            
+            # Create new message column: first 5 with messages, rest empty for map display
+            all_messages = [''] * len(gdf_with_messages)
+            for i, msg in enumerate(limited_messages):
+                all_messages[i] = msg
+            
+            gdf_with_messages['message'] = all_messages
         
         return gdf_with_messages
     

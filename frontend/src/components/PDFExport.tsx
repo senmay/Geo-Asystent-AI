@@ -2,6 +2,11 @@ import React from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import type { GeoJsonFeatureCollection } from '../services/api/types';
+import 'leaflet.browser.print/dist/leaflet.browser.print.min.js';
+
+
+// Import font for Polish characters support
+import 'jspdf/dist/polyfills.es.js';
 
 export interface PDFExportProps {
   data: GeoJsonFeatureCollection | null;
@@ -24,21 +29,52 @@ const PDFExport: React.FC<PDFExportProps> = ({
 
     try {
       onExportStart?.();
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        putOnlyUsedFonts: true,
+        compress: true
+      });
       
-      const doc = new jsPDF();
+      // Configure for Polish characters support
+      doc.setFont('helvetica');
+      
+      // Helper function to handle Polish characters
+      const encodeText = (text: string): string => {
+        return text
+          .replace(/ą/g, 'a')
+          .replace(/ć/g, 'c')
+          .replace(/ę/g, 'e')
+          .replace(/ł/g, 'l')
+          .replace(/ń/g, 'n')
+          .replace(/ó/g, 'o')
+          .replace(/ś/g, 's')
+          .replace(/ź/g, 'z')
+          .replace(/ż/g, 'z')
+          .replace(/Ą/g, 'A')
+          .replace(/Ć/g, 'C')
+          .replace(/Ę/g, 'E')
+          .replace(/Ł/g, 'L')
+          .replace(/Ń/g, 'N')
+          .replace(/Ó/g, 'O')
+          .replace(/Ś/g, 'S')
+          .replace(/Ź/g, 'Z')
+          .replace(/Ż/g, 'Z');
+      };
+      
       const pageWidth = doc.internal.pageSize.getWidth();
       const margin = 20;
       let yPosition = margin;
 
-      // Dodaj nagłówek
-      doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text(reportTitle, margin, yPosition);
+      doc.setFontSize(18);
+      doc.text(encodeText(reportTitle), pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 15;
 
-      // Dodaj datę
-      doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
       const currentDate = new Date().toLocaleDateString('pl-PL', {
         year: 'numeric',
         month: 'long',
@@ -46,76 +82,78 @@ const PDFExport: React.FC<PDFExportProps> = ({
         hour: '2-digit',
         minute: '2-digit'
       });
-      doc.text(`Data wygenerowania: ${currentDate}`, margin, yPosition);
+      doc.text(encodeText(`Data wygenerowania: ${currentDate}`), pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 20;
 
-      // Dodaj podsumowanie
-      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Podsumowanie', margin, yPosition);
+      doc.setFontSize(14);
+      doc.text(encodeText('Podsumowanie'), pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 10;
 
-      doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Liczba znalezionych obiektów: ${data.features.length}`, margin, yPosition);
+      doc.setFontSize(11);
+      doc.text(encodeText(`Liczba znalezionych obiektów: ${data.features.length}`), pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 20;
 
-      // Dodaj listę działek
-      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Lista działek', margin, yPosition);
+      doc.setFontSize(13);
+      doc.text(encodeText('Lista działek'), pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 15;
 
-      // Nagłówki tabeli
+      const colW = [20, 90, 50];
+      const totalTableWidth = colW.reduce((a, b) => a + b, 0);
+      const tableStartX = (pageWidth - totalTableWidth) / 2;
+      const colX = [
+        tableStartX,
+        tableStartX + colW[0],
+        tableStartX + colW[0] + colW[1]
+      ];
+      const colC = colX.map((x, i) => x + colW[i] / 2);
+      const rowHeight = 8;
+
       doc.setFontSize(10);
+      doc.setDrawColor(150);
+      doc.setFillColor('gray');
       doc.setFont('helvetica', 'bold');
-      doc.text('Lp.', margin, yPosition);
-      doc.text('ID Działki', margin + 20, yPosition);
-      doc.text('Powierzchnia (ha)', margin + 80, yPosition);
-      doc.text('Informacje', margin + 140, yPosition);
-      yPosition += 8;
 
-      // Linia pod nagłówkami
-      doc.line(margin, yPosition, pageWidth - margin, yPosition);
-      yPosition += 5;
+      for (let i = 0; i < colW.length; i++) {
+        doc.rect(colX[i], yPosition, colW[i], rowHeight);
+      }
 
-      // Dane działek
+      doc.text(encodeText('Lp.'), colX[0] + colW[0] / 2, yPosition + 5, { align: 'center' });
+      doc.text(encodeText('ID Działki'), colX[1] + colW[1] / 2, yPosition + 5, { align: 'center' });
+      doc.text(encodeText('Powierzchnia (ha)'), colX[2] + colW[2] / 2, yPosition + 5, { align: 'center' });
+
+      yPosition += rowHeight;
       doc.setFont('helvetica', 'normal');
+
       data.features.forEach((feature, index) => {
-        // Sprawdź czy nie przekraczamy strony
-        if (yPosition > 270) {
+        if (yPosition + rowHeight > 270) {
           doc.addPage();
           yPosition = margin;
         }
 
-        const properties = feature.properties || {};
-        
-        // Wyciągnij dane
-        const parcelId = properties.ID_DZIALKI || properties.id || 'Brak ID';
-        const areaHa = properties.area_sqm ? (properties.area_sqm / 10000).toFixed(4) : 'Brak danych';
-        const message = properties.message || 'Działka';
-        
-        // Skróć wiadomość jeśli za długa
-        const shortMessage = typeof message === 'string' 
-          ? (message.length > 30 ? message.substring(0, 30) + '...' : message)
-          : String(message).substring(0, 30);
+        const props = feature.properties || {};
+        const parcelId = props.ID_DZIALKI || props.id || 'Brak ID';
+        const areaHa = props.area_sqm ? (props.area_sqm / 10000).toFixed(4) : 'Brak danych';
 
-        // Dodaj wiersz
-        doc.text(`${index + 1}.`, margin, yPosition);
-        doc.text(String(parcelId), margin + 20, yPosition);
-        doc.text(areaHa, margin + 80, yPosition);
-        doc.text(shortMessage, margin + 140, yPosition);
-        
-        yPosition += 6;
+        for (let i = 0; i < colW.length; i++) {
+          doc.rect(colX[i], yPosition, colW[i], rowHeight);
+        }
+
+        doc.text(`${index + 1}`, colX[0] + colW[0] / 2, yPosition + 5, { align: 'center' });
+        doc.text(encodeText(String(parcelId)), colX[1] + colW[1] / 2, yPosition + 5, { align: 'center' });
+        doc.text(encodeText(areaHa), colX[2] + colW[2] / 2, yPosition + 5, { align: 'center' });
+
+        yPosition += rowHeight;
       });
 
-      // Dodaj screenshot mapy (opcjonalnie)
+      // Screenshot mapy
       try {
         const mapElement = document.querySelector('.leaflet-container') as HTMLElement;
         if (mapElement) {
           yPosition += 20;
-          
-          // Sprawdź czy mamy miejsce na mapę, jeśli nie - dodaj nową stronę
+
           if (yPosition > 200) {
             doc.addPage();
             yPosition = margin;
@@ -123,27 +161,25 @@ const PDFExport: React.FC<PDFExportProps> = ({
 
           doc.setFontSize(14);
           doc.setFont('helvetica', 'bold');
-          doc.text('Mapa', margin, yPosition);
+          doc.text(encodeText('Zrzut ekranu z mapy glownej'), pageWidth / 2, yPosition, { align: 'center' });
           yPosition += 10;
 
-          // Zrób screenshot mapy
           const canvas = await html2canvas(mapElement, {
             useCORS: true,
             allowTaint: true,
-            scale: 0.5, // Zmniejsz skalę dla lepszej wydajności
+            scale: 0.8,
             width: mapElement.offsetWidth,
-            height: Math.min(mapElement.offsetHeight, 400) // Ogranicz wysokość
+            height: Math.min(mapElement.offsetHeight, 800)
           });
 
           const imgData = canvas.toDataURL('image/png');
           const imgWidth = pageWidth - 2 * margin;
           const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          
-          // Sprawdź czy obraz zmieści się na stronie
+
           if (yPosition + imgHeight > 280) {
             doc.addPage();
             yPosition = margin;
-          }
+          }         
 
           doc.addImage(imgData, 'PNG', margin, yPosition, imgWidth, Math.min(imgHeight, 150));
         }
@@ -151,14 +187,14 @@ const PDFExport: React.FC<PDFExportProps> = ({
         console.warn('Nie udało się dodać mapy do PDF:', mapError);
       }
 
-      // Dodaj stopkę
+      // Stopka
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
         doc.text(
-          'Raport wygenerowany przez Geo-Asystent AI',
+          encodeText('Raport wygenerowany przez Geo-Asystent AI'),
           pageWidth / 2,
           doc.internal.pageSize.getHeight() - 10,
           { align: 'center' }
@@ -171,10 +207,8 @@ const PDFExport: React.FC<PDFExportProps> = ({
         );
       }
 
-      // Zapisz PDF
       const fileName = `raport_gis_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
-
       onExportComplete?.(true, `Raport PDF został wygenerowany pomyślnie. Zawiera ${data.features.length} obiektów.`);
 
     } catch (error) {
@@ -202,16 +236,6 @@ const PDFExport: React.FC<PDFExportProps> = ({
         transition: 'all 0.2s ease',
         minWidth: '70px',
         height: '24px'
-      }}
-      onMouseEnter={(e) => {
-        if (data && data.features && data.features.length > 0) {
-          e.currentTarget.style.backgroundColor = '#0056b3';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (data && data.features && data.features.length > 0) {
-          e.currentTarget.style.backgroundColor = '#007bff';
-        }
       }}
       title={data && data.features && data.features.length > 0 
         ? `Eksportuj ${data.features.length} obiektów do PDF` 
